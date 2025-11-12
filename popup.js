@@ -354,6 +354,32 @@ document.addEventListener("DOMContentLoaded", () => {
     render();
   });
 
+  document.getElementById('export')?.addEventListener('click', async () => {
+  const data = await storageGet(['oml_memory']);
+  const memObj = data.oml_memory || { profile: {}, memory: [] };
+  
+  const json = JSON.stringify(memObj, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `oml-export-${Date.now()}.json`;
+  a.click();
+  
+  showStatus('Exported!');
+  });
+
+  // Show welcome note on first use
+const dismissed = localStorage.getItem('oml_welcome_dismissed');
+if (!dismissed) {
+  document.getElementById('welcomeNote').style.display = 'block';
+  document.getElementById('dismissWelcome')?.addEventListener('click', () => {
+    localStorage.setItem('oml_welcome_dismissed', 'true');
+    document.getElementById('welcomeNote').style.display = 'none';
+  });
+}
+
   // initial render
   render();
 });

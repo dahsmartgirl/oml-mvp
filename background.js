@@ -372,4 +372,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+chrome.runtime.onInstalled.addListener(async (details) => {
+  if (details.reason === 'install') {
+    // First-time install
+    const sample = {
+      profile: {},
+      memory: [
+        {
+          id: 'm_sample_1',
+          text: 'I prefer concise explanations over verbose ones',
+          summary: 'Prefers concise explanations',
+          tags: ['personal', 'preference'],
+          page_title: 'OML Sample',
+          page_url: '',
+          source: 'sample',
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'm_sample_2',
+          text: 'I am learning to code and building browser extensions',
+          summary: 'Learning to code, building extensions',
+          tags: ['personal', 'code'],
+          page_title: 'OML Sample',
+          page_url: '',
+          source: 'sample',
+          created_at: new Date().toISOString()
+        }
+      ]
+    };
+    
+    chrome.storage.local.set({ oml_memory: sample });
+  }
+});
+
 log("background service initialized — rich save + confetti ready");
