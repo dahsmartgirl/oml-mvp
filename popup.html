@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>OML — Memory</title>
+  <style>
+    :root { box-sizing: border-box; }
+    *, *:before, *:after { box-sizing: inherit; }
+    body { font-family: system-ui, sans-serif; width:360px; padding:10px; margin:0; }
+    h2 { margin:0 0 8px 0; font-size:16px; }
+    #fileRow { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+    input[type="file"]{ font-size:13px; flex:1 1 160px; min-width:120px; }
+    .btn { padding:8px 10px; border-radius:8px; cursor:pointer; background:#111; color:#fff; border:none; font-weight:600; flex:0 0 auto; }
+    .btn.secondary { background:#eee; color:#111; border:1px solid #ddd; }
+    .controls { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+    #status { margin-top:8px; color:#333; font-size:13px; min-height:18px; }
+    #profile { margin-top:10px; background:#fafafa; padding:10px; border-radius:8px; font-size:13px; }
+    details { margin-top:10px; }
+    summary { cursor:pointer; font-weight:600; }
+    .mem-item { padding:8px; border-bottom:1px solid #eee; font-size:13px; display:flex; justify-content:space-between; gap:8px; align-items:flex-start;}
+    .mem-text { flex:1 1 auto; }
+    .mem-copy { background:#111; color:#fff; border-radius:6px; padding:6px 8px; cursor:pointer; font-size:12px; border:none; }
+    .hint { font-size:12px; color:#666; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <h2>OML — Memory</h2>
+
+  <div id="fileRow">
+    <input id="file" type="file" accept=".json,.txt" />
+    <button id="upload" class="btn">Upload</button>
+  </div>
+
+  <div class="controls">
+    <button id="refresh" class="btn secondary">Refresh</button>
+    <button id="clear" class="btn secondary">Clear</button>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="profile"><strong>Profile</strong><div id="profileBody" style="margin-top:6px;color:#333">No profile loaded.</div></div>
+
+  <details id="memDropdown">
+    <summary id="memSummary">Memories (0)</summary>
+    <div id="memList" style="max-height:300px;overflow:auto;"></div>
+  </details>
+
+  <div class="hint">Click a memory to copy it. Use the Insert button in the site banner to paste into the chat input.</div>
+
+  <script src="parser.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

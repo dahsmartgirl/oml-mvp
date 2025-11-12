@@ -1,0 +1,67 @@
+{
+  "profile": {
+    "name": "Ileri",
+    "role": "Product Designer & Founder",
+    "description": "Tech-savvy designer obsessed with clean interfaces, AI tools, and building products that slap.",
+    "joined_date": "2023-09-18",
+    "interests": ["AI", "Product Design", "Entrepreneurship", "Futurism"],
+    "personality": {
+      "tone": "direct",
+      "style": "bold",
+      "preferences": {
+        "empathy": false,
+        "truth_only": true,
+        "humor_style": "dry"
+      }
+    },
+    "location": "Boston, MA",
+    "goals": [
+      "Build products like Google and Microsoft",
+      "Get into Hult International Business School",
+      "Create a top-tier design portfolio"
+    ]
+  },
+  "memory": [
+    "User co-founded SmoothBallot, an e-election platform with under 500 initial users.",
+    "User is working on a case study called Loop, focused on tracking stolen or lost items through invisible tags.",
+    "User designed Tinybox UI, a minimal open-source UI kit.",
+    "User is building 'Haven' — a mental health app that lets people rant with AI-generated responses.",
+    "User believes in being unapologetically authentic online — bold, raw, and hard to ignore.",
+    "User prefers long-form, thought-provoking LinkedIn posts that push boundaries.",
+    "User’s design philosophy: Clarity > Cleverness. Every pixel should earn its place."
+  ],
+  "context_history": [
+    {
+      "timestamp": "2025-11-02T18:40:00Z",
+      "source": "ChatGPT",
+      "prompt": "Why does safeStorageGet throw 'Extension context invalidated'?",
+      "response_summary": "Explained that it happens when the Chrome extension reloads or loses context due to a manifest change."
+    },
+    {
+      "timestamp": "2025-11-02T19:05:00Z",
+      "source": "Claude",
+      "prompt": "Test insert context feature",
+      "response_summary": "Claude inserted context manually on button press, not automatically."
+    }
+  ],
+  "embeddings": {
+    "profile_vector": [0.12, -0.23, 0.87, 0.09, -0.45, 0.73],
+    "memory_vectors": [
+      [0.43, 0.11, -0.66, 0.21, 0.08, 0.49],
+      [0.05, 0.72, -0.13, 0.91, -0.24, 0.31],
+      [-0.18, 0.54, 0.77, -0.02, -0.38, 0.40]
+    ]
+  },
+  "settings": {
+    "auto_insert_enabled": false,
+    "theme": "system",
+    "keyboard_shortcut": "Ctrl+O",
+    "last_synced": "2025-11-02T20:00:00Z",
+    "hidden_domains": ["claude.ai", "gemini.google.com"]
+  },
+  "stats": {
+    "total_contexts_inserted": 24,
+    "total_memory_items": 7,
+    "unique_domains_used": ["chat.openai.com", "claude.ai", "gemini.google.com"]
+  }
+}
