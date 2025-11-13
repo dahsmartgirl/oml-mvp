@@ -1,4 +1,4 @@
-# ![oml logo](icon.png)OML – Open Memory Layer
+OML – Open Memory Layer v0.1.0
 
 **One memory layer. Every AI chatbot.**
 
@@ -90,7 +90,7 @@ Got old ChatGPT or Claude exports?
    - Select the unzipped folder
 
 3. **Done!** 
-   - See the ![oml logo](icon.png) icon in your toolbar
+   - See the icon in your toolbar
    - Go to ChatGPT or Claude to try it
 
 ---
@@ -110,7 +110,7 @@ Got old ChatGPT or Claude exports?
 3. Shift+Click to add custom tags
 
 **Manual entry:**
-1. Click![oml logo](icon.png) icon in toolbar
+1. Click the icon in toolbar
 2. Add text and tags
 3. Save
 
@@ -127,7 +127,7 @@ Got old ChatGPT or Claude exports?
 
 ### Manage Everything
 
-Click ![oml logo](icon.png) icon to:
+Click the icon to:
 - View all memories from all AI chats
 - Search by keyword or tag
 - See what you've told ChatGPT vs Claude
@@ -320,7 +320,7 @@ See `LICENSE` file for full terms.
 
 ## Why I Built This
 
-**I was tired of AI amnesia.**
+**I was tired of AI cross amnesia.**
 
 I'd spend 10 minutes explaining my project to ChatGPT.  
 Then switch to Claude and do it again.  
