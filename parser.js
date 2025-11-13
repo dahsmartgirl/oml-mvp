@@ -1,97 +1,76 @@
-// parser.js - better export parser for OML MVP
-// Usage: const parsed = await parseExportFile(file);
+// parser.js - Fixed parser that handles OML exports first, then other formats
 
-function isPlainObject(x) { return x && typeof x === 'object' && !Array.isArray(x); }
-
-// harvest all strings from nested structure
-function collectStringsFromObject(obj, out=[]) {
-  if (obj == null) return out;
-  if (typeof obj === 'string') {
-    out.push(obj);
-    return out;
-  }
-  if (typeof obj === 'number' || typeof obj === 'boolean') {
-    out.push(String(obj));
-    return out;
-  }
-  if (Array.isArray(obj)) {
-    for (const v of obj) collectStringsFromObject(v, out);
-    return out;
-  }
-  if (isPlainObject(obj)) {
-    for (const k of Object.keys(obj)) {
-      const v = obj[k];
-      // common message fields
-      if (k.match(/^(content|text|message|body|utterance|reply|prompt)$/i) && (typeof v === 'string')) {
-        out.push(v);
-        continue;
-      }
-      // arrays that look like conversations/messages
-      if (Array.isArray(v) && v.length && (v[0].content || v[0].text || v[0].message || typeof v[0] === 'string')) {
-        for (const item of v) {
-          if (item && typeof item === 'object') {
-            if (item.content) out.push(item.content);
-            else if (item.text) out.push(item.text);
-            else if (item.message) out.push(item.message);
-            else collectStringsFromObject(item, out);
-          } else if (typeof item === 'string') {
-            out.push(item);
-          }
-        }
-        continue;
-      }
-      collectStringsFromObject(v, out);
-    }
-    return out;
-  }
-  return out;
-}
-
-function sentenceSplit(text) {
-  // split into sentences, but avoid splitting on abbreviations bluntly.
-  // Simple approach good enough for UI: split on period/newline/!/? but keep fragments > 10 chars.
-  const parts = text.split(/[\r\n]+|[.?!]+/).map(s => s.trim()).filter(Boolean);
-  return parts;
-}
-
-function looksLikeFact(s) {
-  if (!s || s.length < 12) return false;
-  const low = s.toLowerCase();
-  // obvious useful patterns
-  if (/\b(i am|i'm|my |name is|working on|building|founder|co[- ]found|project|graduat|live in|based in|prefer|likes|love|hate)\b/i.test(s)) return true;
-  // proper noun sentences that start with capitalized word
-  if (/^[A-Z][a-z]{2,}/.test(s)) return true;
-  // fallback if contains at least one comma and > 40 chars (likely descriptive)
-  if (s.length > 40 && s.includes(',')) return true;
-  return false;
-}
-
-function cleanText(s) {
-  if (!s) return '';
-  // replace weird leading/trailing punctuation and stray quotes/commas
-  return s.replace(/^[\s"'\u201c\u201d,;:-]+/, '').replace(/[\s"'\u201c\u201d,;:-]+$/, '').trim();
+function isPlainObject(x) { 
+  return x && typeof x === 'object' && !Array.isArray(x); 
 }
 
 async function parseExportFile(file) {
   const text = await file.text();
   let data;
+  
   try {
     data = JSON.parse(text);
   } catch (err) {
-    // fallback plain text as single memory
-    const snippet = cleanText(text).slice(0, 1000);
-    return { profile: {}, memory: snippet ? [snippet] : [] };
+    // Not JSON - treat as plain text
+    const snippet = text.trim().slice(0, 1000);
+    return { 
+      profile: {}, 
+      memory: snippet ? [{ text: snippet, tags: [], summary: snippet.slice(0, 200) }] : [] 
+    };
   }
 
-  // If object already looks like OML memory format, accept it
-  if (data && (data.profile || data.memory)) {
+  // FIRST: Check if this is OML's own export format
+  if (data && (data.profile !== undefined || data.memory !== undefined)) {
+    console.log("Detected OML export format");
+    
     const profile = data.profile || {};
-    const mem = Array.isArray(data.memory) ? data.memory.map(m => cleanText(String(m))).filter(Boolean) : [];
-    return { profile, memory: Array.from(new Set(mem)).slice(0, 500) };
+    let memories = [];
+    
+    if (Array.isArray(data.memory)) {
+      memories = data.memory.map(m => {
+        // Already in correct format
+        if (m && typeof m === 'object' && m.text) {
+          return {
+            id: m.id || ('m_imp_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)),
+            text: String(m.text || ''),
+            summary: m.summary || String(m.text || '').slice(0, 220),
+            tags: Array.isArray(m.tags) ? m.tags : [],
+            page_title: m.page_title || '',
+            page_url: m.page_url || '',
+            source: m.source || 'import',
+            created_at: m.created_at || new Date().toISOString(),
+            selectorHint: m.selectorHint,
+            snippet: m.snippet,
+            hostname: m.hostname
+          };
+        }
+        // String format
+        if (typeof m === 'string') {
+          return {
+            id: 'm_imp_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+            text: m,
+            summary: m.slice(0, 220),
+            tags: [],
+            page_title: '',
+            page_url: '',
+            source: 'import',
+            created_at: new Date().toISOString()
+          };
+        }
+        return null;
+      }).filter(Boolean);
+    }
+    
+    console.log(`Parsed ${memories.length} memories from OML export`);
+    return { profile, memory: memories };
   }
 
-  // heuristics: pull profile-like fields
+  // SECOND: Try to parse as ChatGPT/Claude export
+  console.log("Trying generic chat export format");
+  
   const profile = {};
+  
+  // Extract profile if exists
   if (data.user || data.profile) {
     const psrc = data.user || data.profile;
     if (isPlainObject(psrc)) {
@@ -101,83 +80,112 @@ async function parseExportFile(file) {
       if (psrc.location) profile.location = String(psrc.location);
     }
   }
-  // also pull top-level known keys
+  
+  // Top-level profile fields
   if (data.name && !profile.name) profile.name = String(data.name);
   if (data.email && !profile.email) profile.email = String(data.email);
 
-  // If there's a direct messages/conversations array, extract those first
+  // Extract memories from various possible structures
   let candidateStrings = [];
-  const preferPaths = ['memory','memories','messages','conversations','chat','conversation','history','context_history'];
-  for (const k of preferPaths) {
-    if (k in data) {
-      const v = data[k];
-      if (Array.isArray(v)) {
-        // push textual content from items
-        for (const item of v) {
-          if (!item) continue;
-          if (typeof item === 'string') candidateStrings.push(item);
-          else if (isPlainObject(item)) {
-            if (item.content) candidateStrings.push(item.content);
-            else if (item.text) candidateStrings.push(item.text);
-            else if (item.message) candidateStrings.push(item.message);
-            else {
-              // try messages inside
-              if (Array.isArray(item.messages)) {
-                item.messages.forEach(m => { if (m && (m.content||m.text||m.message)) candidateStrings.push(m.content||m.text||m.message); });
-              } else {
-                candidateStrings.push(JSON.stringify(item).slice(0, 1000));
-              }
+  
+  // Check common chat export paths
+  const paths = ['messages', 'conversations', 'chat', 'history', 'mapping'];
+  for (const path of paths) {
+    if (path in data) {
+      const val = data[path];
+      
+      if (Array.isArray(val)) {
+        val.forEach(item => {
+          if (!item) return;
+          
+          if (typeof item === 'string') {
+            candidateStrings.push(item);
+          } else if (isPlainObject(item)) {
+            // Extract text content
+            if (item.content) candidateStrings.push(String(item.content));
+            if (item.text) candidateStrings.push(String(item.text));
+            if (item.message) candidateStrings.push(String(item.message));
+            
+            // Check for nested messages
+            if (Array.isArray(item.messages)) {
+              item.messages.forEach(msg => {
+                if (msg && (msg.content || msg.text)) {
+                  candidateStrings.push(String(msg.content || msg.text));
+                }
+              });
             }
-          } else {
-            candidateStrings.push(String(item));
           }
-        }
-      } else {
-        // single object or string
-        candidateStrings.push(typeof v === 'string' ? v : JSON.stringify(v));
+        });
+      } else if (isPlainObject(val)) {
+        // Mapping object (ChatGPT format)
+        Object.values(val).forEach(node => {
+          if (node && node.message && node.message.content) {
+            if (typeof node.message.content === 'string') {
+              candidateStrings.push(node.message.content);
+            } else if (Array.isArray(node.message.content.parts)) {
+              node.message.content.parts.forEach(part => {
+                if (typeof part === 'string') candidateStrings.push(part);
+              });
+            }
+          }
+        });
       }
     }
   }
 
-  // If not found, do a recursive walk for strings
+  // If nothing found, do a recursive search
   if (candidateStrings.length === 0) {
-    collectStringsFromObject(data, candidateStrings);
+    console.log("No structured data found, doing deep search");
+    candidateStrings = collectStringsRecursive(data);
   }
 
-  // Clean, split into sentences, then filter to likely facts
-  const facts = new Set();
-  for (const raw of candidateStrings) {
-    if (!raw) continue;
-    // ignore lines that are just JSON dumps
-    const t = String(raw);
-    // split into sentences
-    const sents = sentenceSplit(t);
-    for (const s of sents) {
-      const c = cleanText(s);
-      if (!c) continue;
-      if (looksLikeFact(c)) {
-        if (c.length <= 400) facts.add(c);
-        else facts.add(c.slice(0, 300));
+  // Clean and deduplicate
+  const cleaned = candidateStrings
+    .map(s => String(s).trim())
+    .filter(s => s.length > 15 && s.length < 5000) // Reasonable length
+    .filter((s, i, arr) => arr.indexOf(s) === i); // Dedupe
+
+  const memories = cleaned.slice(0, 500).map(text => ({
+    id: 'm_imp_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+    text: text,
+    summary: text.slice(0, 220),
+    tags: [],
+    page_title: 'Import',
+    page_url: '',
+    source: 'import',
+    created_at: new Date().toISOString()
+  }));
+
+  console.log(`Extracted ${memories.length} memories from chat export`);
+  return { profile, memory: memories };
+}
+
+function collectStringsRecursive(obj, depth = 0, results = []) {
+  if (depth > 10) return results; // Prevent infinite recursion
+  if (!obj) return results;
+  
+  if (typeof obj === 'string') {
+    results.push(obj);
+    return results;
+  }
+  
+  if (Array.isArray(obj)) {
+    obj.forEach(item => collectStringsRecursive(item, depth + 1, results));
+    return results;
+  }
+  
+  if (isPlainObject(obj)) {
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      
+      // Prioritize content-like keys
+      if (key.match(/content|text|message|body/i) && typeof val === 'string') {
+        results.push(val);
+      } else {
+        collectStringsRecursive(val, depth + 1, results);
       }
     }
-    // if we didn't find any facts inside this raw chunk but the chunk itself is short, keep it
-    if (sents.length === 1) {
-      const only = cleanText(sents[0]);
-      if (only.length > 20 && only.length < 300 && !only.startsWith('{')) facts.add(only);
-    }
   }
-
-  // If nothing was mined as facts, fall back to some top strings (first N)
-  if (facts.size === 0 && candidateStrings.length > 0) {
-    for (const s of candidateStrings.slice(0, 200)) {
-      const c = cleanText(String(s));
-      if (c && c.length > 12 && c.length < 500) facts.add(c);
-    }
-  }
-
-  // Final dedupe and ordering
-  const memoryArray = Array.from(facts).map(s => s.replace(/\s+/g,' ').trim()).filter(Boolean);
-  const trimmed = memoryArray.slice(0, 500);
-
-  return { profile, memory: trimmed };
+  
+  return results;
 }

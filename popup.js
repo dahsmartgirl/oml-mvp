@@ -308,44 +308,76 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  if (uploadBtn && fileInput) {
-    uploadBtn.addEventListener("click", async () => {
-      const f = fileInput.files[0];
-      if (!f) { alert("Choose a .json export file first."); return; }
-      try {
-        if (typeof parseExportFile !== "function") {
-          alert("parseExportFile not found. Ensure your popup has parseExportFile helper.");
-          return;
-        }
-        const parsed = await parseExportFile(f);
-        // standardize parsed to our canonical form
-        const canonical = { profile: parsed.profile || {}, memory: [] };
-        const rawMem = Array.isArray(parsed.memory) ? parsed.memory : (Array.isArray(parsed.context_history) ? parsed.context_history.map(c=>c.response_summary||c.prompt||"") : []);
-        for (const r of rawMem) canonical.memory.push((typeof r === "string") ? { text: r } : r);
-        // transform raw to structured objects (background save flow expects to receive structured objects)
-        // we just overwrite storage with canonical converted to our shape
-        const converted = canonical.memory.map(item => {
-          return {
-            id: item.id || ('m_imp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6)),
-            text: item.text || item.summary || String(item || ""),
-            summary: item.summary || (item.text && item.text.slice(0,220)) || "",
-            tags: Array.isArray(item.tags) ? item.tags : [],
-            page_title: item.page_title || item.source || "",
-            page_url: item.page_url || "",
-            source: item.source || "import",
-            created_at: item.created_at || new Date().toISOString()
-          };
-        });
-        await storageSet({ oml_memory: { profile: canonical.profile, memory: converted } });
-        showStatus("Parsed and saved memory.");
-        setTimeout(()=> showStatus(""), 1400);
-        render();
-      } catch (e) {
-        console.error("parse error", e);
-        alert("Couldn't parse file. Check console.");
+  // Upload handler - FIXED TO MERGE NOT REPLACE
+if (uploadBtn && fileInput) {
+  uploadBtn.addEventListener("click", async () => {
+    const f = fileInput.files[0];
+    if (!f) { 
+      showStatus("⚠ Choose a file first");
+      return; 
+    }
+    try {
+      if (typeof parseExportFile !== "function") {
+        showStatus("✗ Parser not found");
+        return;
       }
-    });
-  }
+      
+      const parsed = await parseExportFile(f);
+      const canonical = { profile: parsed.profile || {}, memory: [] };
+      const rawMem = Array.isArray(parsed.memory) ? parsed.memory : [];
+      
+      for (const r of rawMem) {
+        canonical.memory.push((typeof r === "string") ? { text: r } : r);
+      }
+      
+      const converted = canonical.memory.map(item => {
+        return {
+          id: item.id || ('m_imp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6)),
+          text: item.text || item.summary || String(item || ""),
+          summary: item.summary || (item.text && item.text.slice(0,220)) || "",
+          tags: Array.isArray(item.tags) ? item.tags : [],
+          page_title: item.page_title || item.source || "Import",
+          page_url: item.page_url || "",
+          source: item.source || "import",
+          created_at: item.created_at || new Date().toISOString()
+        };
+      });
+      
+      // GET EXISTING DATA FIRST - DON'T ERASE IT
+      const existing = await storageGet(['oml_memory']);
+      const existingRoot = existing.oml_memory || { profile: {}, memory: [] };
+      
+      // MERGE profiles (new data overwrites old)
+      const mergedProfile = Object.assign({}, existingRoot.profile || {}, canonical.profile || {});
+      
+      // MERGE memories - deduplicate by text content
+      const existingMemories = Array.isArray(existingRoot.memory) ? existingRoot.memory : [];
+      const allMemories = [...existingMemories, ...converted];
+      
+      // Deduplicate by text content (keep first occurrence)
+      const seen = new Set();
+      const deduplicated = [];
+      for (const mem of allMemories) {
+        const key = (mem.text || '').slice(0, 200).toLowerCase().trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        deduplicated.push(mem);
+      }
+      
+      // Save merged data
+      await storageSet({ oml_memory: { profile: mergedProfile, memory: deduplicated } });
+      
+      const newCount = converted.length;
+      const totalCount = deduplicated.length;
+      showStatus(`✓ Added ${newCount} memories (${totalCount} total)`);
+      render();
+      
+    } catch (e) {
+      console.error("Import error:", e);
+      showStatus("✗ Import failed - check console");
+    }
+  });
+}
 
   if (refreshBtn) refreshBtn.addEventListener("click", () => render(searchInput ? searchInput.value : "", tagFilter ? tagFilter.value : ""));
   if (clearBtn) clearBtn.addEventListener("click", async () => {

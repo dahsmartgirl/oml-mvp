@@ -21,7 +21,8 @@
     "*://chat.openai.com/*",
     "*://chatgpt.com/*",
     "*://claude.ai/*",
-    "*://*.google.com/*"
+    "*://gemini.google.com/*",
+    "*://grok.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -36,7 +37,8 @@
         "*://chat.openai.com/*",
         "*://chatgpt.com/*",
         "*://claude.ai/*",
-        "*://*.google.com/*"
+        "*://*.google.com/*",
+        "*://grok.com/*"
       ],
       "js": ["contentScript.js"],
       "run_at": "document_idle"

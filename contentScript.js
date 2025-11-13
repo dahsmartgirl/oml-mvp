@@ -666,148 +666,226 @@
     } catch(e){}
   }
 
-  // ---------- Banner placement (same behavior) ----------
-  let bannerEl = null;
-  let currentInput = null;
-  let repositionHandle = null;
-  let userMoved = false;
-  let dragState = null;
+  // ---------- Banner placement - STABLE VERSION ----------
+let bannerEl = null;
+let currentInput = null;
+let repositionHandle = null;
+let userMoved = false;
+let dragState = null;
+let bannerVisible = false;
 
-  function positionBannerNearInput(inputEl) {
-    if (!bannerEl || !inputEl || userMoved) return;
-    try {
-      const rect = inputEl.getBoundingClientRect();
-      const bannerRect = bannerEl.getBoundingClientRect();
-      let left = rect.left - bannerRect.width - 8;
-      if (left < 6) left = rect.left + 6;
-      let top = rect.top + (rect.height - bannerRect.height)/2;
-      const vpW = window.innerWidth, vpH = window.innerHeight;
-      if (top < 6) top = 6;
-      if (top + bannerRect.height > vpH - 6) top = vpH - bannerRect.height - 6;
-      if (left + bannerRect.width > vpW - 6) left = vpW - bannerRect.width - 6;
-      bannerEl.style.left = `${Math.round(left)}px`;
-      bannerEl.style.top = `${Math.round(top)}px`;
+function positionBannerNearInput(inputEl) {
+  if (!bannerEl || !inputEl || userMoved) return;
+  try {
+    const rect = inputEl.getBoundingClientRect();
+    const bannerRect = bannerEl.getBoundingClientRect();
+    
+    let left = rect.left - bannerRect.width - 12;
+    if (left < 6) left = rect.right + 12;
+    if (left + bannerRect.width > window.innerWidth - 6) {
+      left = rect.left + 6;
+    }
+    
+    let top = rect.top + (rect.height - bannerRect.height) / 2;
+    const vpH = window.innerHeight;
+    
+    if (top < 6) top = 6;
+    if (top + bannerRect.height > vpH - 6) top = vpH - bannerRect.height - 6;
+    
+    bannerEl.style.left = `${Math.round(left)}px`;
+    bannerEl.style.top = `${Math.round(top)}px`;
+    
+    if (!bannerVisible) {
       bannerEl.style.opacity = "1";
       bannerEl.style.transform = "translateY(0)";
-    } catch(e){}
+      bannerVisible = true;
+    }
+  } catch (e) {
+    console.error("[OML] Banner positioning error:", e);
   }
+}
 
-  function removeBanner() {
-    if (bannerEl && bannerEl.parentElement) bannerEl.parentElement.removeChild(bannerEl);
-    bannerEl = null;
-    currentInput = null;
-    if (repositionHandle) { window.removeEventListener("scroll", repositionHandle); window.removeEventListener("resize", repositionHandle); repositionHandle = null; }
-  }
-
-  async function renderMiniBanner() {
+function removeBanner() {
+  if (bannerEl && bannerEl.parentElement) {
     try {
-      const s = await safeStorageGet(["oml_memory", "oml_hidden_domains"]);
-      const domain = location.hostname;
-      const hidden = s.oml_hidden_domains || {};
-      if (hidden[domain]) { removeBanner(); return; }
+      bannerEl.style.opacity = "0";
+      setTimeout(() => {
+        if (bannerEl && bannerEl.parentElement) {
+          bannerEl.parentElement.removeChild(bannerEl);
+        }
+      }, 200);
+    } catch(e) {}
+  }
+  bannerEl = null;
+  currentInput = null;
+  bannerVisible = false;
+  if (repositionHandle) {
+    window.removeEventListener("scroll", repositionHandle);
+    window.removeEventListener("resize", repositionHandle);
+    repositionHandle = null;
+  }
+}
 
-      const theme = detectTheme();
-      if (!bannerEl) {
-        bannerEl = createBannerElement(theme);
-        document.body.appendChild(bannerEl);
+async function renderMiniBanner() {
+  try {
+    const s = await safeStorageGet(["oml_memory", "oml_hidden_domains"]);
+    const domain = location.hostname;
+    const hidden = s.oml_hidden_domains || {};
+    
+    if (hidden[domain]) {
+      removeBanner();
+      return;
+    }
 
-        const insertBtn = bannerEl.querySelector("#oml-insert-btn");
-        const hideBtn = bannerEl.querySelector("#oml-hide-btn");
+    const theme = detectTheme();
+    
+    // Create banner if it doesn't exist
+    if (!bannerEl) {
+      bannerEl = createBannerElement(theme);
+      document.body.appendChild(bannerEl);
+      bannerVisible = false;
 
-        insertBtn && insertBtn.addEventListener("click", async () => {
+      const insertBtn = bannerEl.querySelector("#oml-insert-btn");
+      const hideBtn = bannerEl.querySelector("#oml-hide-btn");
+
+      if (insertBtn) {
+        insertBtn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
           const data = await safeStorageGet(["oml_memory"]);
           const memNow = data.oml_memory || { profile:{}, memory:[] };
           const el = findEditable();
-          const query = el ? (( (el.value || el.innerText) || "")) : "";
+          
+          if (!el) {
+            alert("OML: No input field found");
+            return;
+          }
+          
+          const query = (el.value || el.innerText || "");
           const toInsert = pickRelevant(memNow, query);
-          if (!toInsert) { alert("OML: no relevant memory found."); return; }
+          
+          if (!toInsert) {
+            alert("OML: No relevant memory found");
+            return;
+          }
+          
           await safeInsert(el, toInsert);
         });
+      }
 
-        hideBtn && hideBtn.addEventListener("click", async () => {
+      if (hideBtn) {
+        hideBtn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          
           const s2 = await safeStorageGet(["oml_hidden_domains"]);
           const hiddenNow = s2.oml_hidden_domains || {};
           hiddenNow[location.hostname] = true;
           await safeStorageSet({ oml_hidden_domains: hiddenNow });
           removeBanner();
         });
+      }
 
-        bannerEl.addEventListener("mousedown", (ev) => {
-          if (ev.target.tagName === "BUTTON" || ev.target.closest("button")) return;
-          dragState = { startX: ev.clientX, startY: ev.clientY,
-                        left: parseFloat(bannerEl.style.left || 0), top: parseFloat(bannerEl.style.top || 0) || 0 };
-          bannerEl.style.cursor = "grabbing";
-          userMoved = true;
-          ev.preventDefault();
-        });
+      // Dragging
+      bannerEl.addEventListener("mousedown", (ev) => {
+        if (ev.target.tagName === "BUTTON" || ev.target.closest("button")) return;
+        
+        dragState = {
+          startX: ev.clientX,
+          startY: ev.clientY,
+          left: parseFloat(bannerEl.style.left || 0),
+          top: parseFloat(bannerEl.style.top || 0)
+        };
+        bannerEl.style.cursor = "grabbing";
+        userMoved = true;
+        ev.preventDefault();
+      });
 
-        window.addEventListener("mousemove", (ev) => {
-          if (!dragState) return;
-          const dx = ev.clientX - dragState.startX;
-          const dy = ev.clientY - dragState.startY;
-          const newLeft = Math.max(6, Math.min(window.innerWidth - bannerEl.offsetWidth - 6, dragState.left + dx));
-          const newTop = Math.max(6, Math.min(window.innerHeight - bannerEl.offsetHeight - 6, dragState.top + dy));
-          bannerEl.style.left = `${Math.round(newLeft)}px`;
-          bannerEl.style.top = `${Math.round(newTop)}px`;
-        });
+      window.addEventListener("mousemove", (ev) => {
+        if (!dragState) return;
+        
+        const dx = ev.clientX - dragState.startX;
+        const dy = ev.clientY - dragState.startY;
+        const newLeft = Math.max(6, Math.min(window.innerWidth - bannerEl.offsetWidth - 6, dragState.left + dx));
+        const newTop = Math.max(6, Math.min(window.innerHeight - bannerEl.offsetHeight - 6, dragState.top + dy));
+        
+        bannerEl.style.left = `${Math.round(newLeft)}px`;
+        bannerEl.style.top = `${Math.round(newTop)}px`;
+      });
 
-        window.addEventListener("mouseup", () => {
-          if (dragState) { dragState = null; bannerEl.style.cursor = "grab"; }
-        });
+      window.addEventListener("mouseup", () => {
+        if (dragState) {
+          dragState = null;
+          if (bannerEl) bannerEl.style.cursor = "grab";
+        }
+      });
+    } else {
+      // Update theme if it changed
+      if (theme === "dark") {
+        bannerEl.style.background = "rgba(18,18,18,0.88)";
+        bannerEl.style.color = "#e6e6e6";
+        const logoDiv = bannerEl.querySelector("div");
+        if (logoDiv) logoDiv.style.color = "#BDBDBD";
       } else {
-        if (theme === "dark") { bannerEl.style.background = "rgba(18,18,18,0.88)"; bannerEl.style.color = "#e6e6e6"; bannerEl.querySelector("div") && (bannerEl.querySelector("div").style.color = "#BDBDBD"); }
-        else { bannerEl.style.background = "rgba(255,255,255,0.95)"; bannerEl.style.color = "#111"; bannerEl.querySelector("div") && (bannerEl.querySelector("div").style.color = "#545454"); }
+        bannerEl.style.background = "rgba(255,255,255,0.95)";
+        bannerEl.style.color = "#111";
+        const logoDiv = bannerEl.querySelector("div");
+        if (logoDiv) logoDiv.style.color = "#545454";
       }
+    }
 
-      let target = document.activeElement;
-      if (!target || !(target.tagName === "TEXTAREA" || (target.tagName === "INPUT" && target.type === "text") || target.getAttribute("contenteditable") === "true" || target.getAttribute("role") === "textbox")) {
-        target = findEditable();
-      }
-      if (!target) { removeBanner(); return; }
+    // Find target input
+    let target = document.activeElement;
+    if (!target || !(
+      target.tagName === "TEXTAREA" || 
+      (target.tagName === "INPUT" && target.type === "text") || 
+      target.getAttribute("contenteditable") === "true" || 
+      target.getAttribute("role") === "textbox"
+    )) {
+      target = findEditable();
+    }
 
-      currentInput = target;
-      if (!userMoved) {
+    if (!target) {
+      // No input found - hide banner but don't remove it
+      if (bannerEl && bannerVisible) {
         bannerEl.style.opacity = "0";
         bannerEl.style.transform = "translateY(6px)";
-        setTimeout(()=>positionBannerNearInput(target), 18);
+        bannerVisible = false;
       }
-
-      if (!repositionHandle) {
-        repositionHandle = debounce(() => { if (currentInput && !userMoved) positionBannerNearInput(currentInput); }, 60);
-        window.addEventListener("scroll", repositionHandle, true);
-        window.addEventListener("resize", repositionHandle);
-      }
-
-    } catch (e) {
-      setTimeout(()=>{ try{ renderMiniBanner(); }catch(_){} }, 600);
+      return;
     }
-  }
 
-  // hotkey Ctrl/Cmd+O to unhide or insert
-  async function handleHotkey(e) {
-    const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-    const ctrlOk = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey;
-    if (!ctrlOk) return;
-    if (e.key && e.key.toLowerCase() === "o") {
-      e.preventDefault();
-      const domain = location.hostname;
-      const s = await safeStorageGet(["oml_hidden_domains","oml_memory"]);
-      const hidden = s.oml_hidden_domains || {};
-      if (hidden[domain]) {
-        delete hidden[domain];
-        await safeStorageSet({ oml_hidden_domains: hidden });
-        userMoved = false;
+    currentInput = target;
+    
+    if (!userMoved) {
+      positionBannerNearInput(target);
+    } else if (!bannerVisible) {
+      bannerEl.style.opacity = "1";
+      bannerEl.style.transform = "translateY(0)";
+      bannerVisible = true;
+    }
+
+    // Setup reposition listener
+    if (!repositionHandle) {
+      repositionHandle = debounce(() => {
+        if (currentInput && !userMoved) {
+          positionBannerNearInput(currentInput);
+        }
+      }, 100);
+      window.addEventListener("scroll", repositionHandle, true);
+      window.addEventListener("resize", repositionHandle);
+    }
+
+  } catch (e) {
+    console.error("[OML] renderMiniBanner error:", e);
+    setTimeout(() => {
+      try {
         renderMiniBanner();
-        return;
-      }
-      const mem = s.oml_memory || { profile:{}, memory:[] };
-      const el = findEditable();
-      const query = el ? ((el.value || el.innerText) || "") : "";
-      const toInsert = pickRelevant(mem, query);
-      if (!toInsert) { alert("OML: no relevant memory to insert."); return; }
-      await safeInsert(el, toInsert);
-    }
+      } catch(_) {}
+    }, 1000);
   }
+}
 
   // message handler: allow popup to insert text through content script
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -926,6 +1004,61 @@
     hideSelectionTooltip();
     if (quickEditEl && quickEditEl.el) quickEditEl.hide();
   }, true);
+
+  // ========== HOTKEY HANDLER (Ctrl/Cmd+O) ==========
+async function handleHotkey(e) {
+  const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+  const ctrlOk = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey;
+  
+  if (!ctrlOk || !e.key || e.key.toLowerCase() !== "o") {
+    return;
+  }
+  
+  e.preventDefault();
+  
+  try {
+    const domain = location.hostname;
+    const s = await safeStorageGet(["oml_hidden_domains", "oml_memory"]);
+    const hidden = s.oml_hidden_domains || {};
+    
+    // If OML is hidden on this site, unhide it
+    if (hidden[domain]) {
+      delete hidden[domain];
+      await safeStorageSet({ oml_hidden_domains: hidden });
+      userMoved = false;
+      renderMiniBanner();
+      console.log("[OML] Unhidden on this site");
+      return;
+    }
+    
+    // Otherwise, try to insert memory
+    const mem = s.oml_memory || { profile: {}, memory: [] };
+    const el = findEditable();
+    
+    if (!el) {
+      alert("OML: No input field found");
+      return;
+    }
+    
+    const query = (el.value || el.innerText || "");
+    const toInsert = pickRelevant(mem, query);
+    
+    if (!toInsert) {
+      alert("OML: No relevant memory to insert");
+      return;
+    }
+    
+    await safeInsert(el, toInsert);
+    console.log("[OML] Inserted via hotkey");
+    
+  } catch (e) {
+    console.error("[OML] Hotkey handler error:", e);
+  }
+}
+
+// Attach hotkey listener
+document.addEventListener("keydown", handleHotkey, true);
+console.log("[OML] Hotkey handler attached (Ctrl/Cmd+O)");
 
   // observers
   const debouncedRender = debounce(renderMiniBanner, 180);
