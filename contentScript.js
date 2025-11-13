@@ -263,6 +263,21 @@
   let selectionTooltipEl = null;
   let quickEditEl = null;
   let selectionTimeout = null;
+  let lastSelection = { text: '', rect: null };
+  let ignoreHide = false;
+
+  function preserveSelection() {
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0) return sel.getRangeAt(0).cloneRange();
+    return null;
+  }
+
+  function restoreSelection(range) {
+    if (!range) return;
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
 
   function createSelectionTooltip(theme) {
     if (selectionTooltipEl) return selectionTooltipEl;
@@ -313,6 +328,11 @@
 
     tip.appendChild(saveBtn);
     tip.appendChild(cancelBtn);
+
+    tip.addEventListener('mousedown', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+    });
 
     selectionTooltipEl = tip;
     document.body.appendChild(selectionTooltipEl);
@@ -437,6 +457,11 @@
     panel.style.background = (theme === "dark") ? "rgba(18,18,18,0.95)" : "#fff";
     panel.style.color = (theme === "dark") ? "#eee" : "#111";
 
+    panel.addEventListener('mousedown', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+    });
+
     // summary
     const sumLabel = document.createElement("div"); sumLabel.textContent = "Summary (short)";
     sumLabel.style.fontSize = "12px"; sumLabel.style.opacity = "0.8";
@@ -448,6 +473,7 @@
     sumInput.style.border = "1px solid rgba(0,0,0,0.08)";
     sumInput.style.width = "100%";
     sumInput.style.boxSizing = "border-box";
+    sumInput.style.userSelect = "text";
 
     // suggested chips
     const suggestedLabel = document.createElement("div"); suggestedLabel.textContent = "Suggested tags";
@@ -468,6 +494,7 @@
     tagInput.style.border = "1px solid rgba(0,0,0,0.08)";
     tagInput.style.width = "100%";
     tagInput.style.boxSizing = "border-box";
+    tagInput.style.userSelect = "text";
 
     const tagChipsWrap = document.createElement("div");
     tagChipsWrap.style.display = "flex";
@@ -598,21 +625,21 @@
       const tagsArr = Array.from(quickEditEl.state.selectedTags);
       const meta = quickEditEl.lastMeta || { page_title: document.title, page_url: location.href, hostname: location.hostname, snippet: quickEditEl.lastSnippet || "" };
       const textPayload = quickEditEl.lastSelectedText || "";
-      // ensure id and created_at
-      const item = {
-        id: quickEditEl.lastId || uid(),
-        text: textPayload,
-        summary: summaryVal || meta.snippet || (String(textPayload || "").slice(0,220)),
-        tags: tagsArr.length ? tagsArr : undefined,
-        page_title: meta.page_title || "",
-        page_url: meta.page_url || "",
-        source: meta.source || "quick_edit",
-        created_at: quickEditEl.lastCreatedAt || new Date().toISOString(),
-        selectorHint: meta.selectorHint || undefined,
-        hostname: meta.hostname || undefined
-      };
+      const created_at = quickEditEl.lastCreatedAt || new Date().toISOString();
+      const id = quickEditEl.lastId || uid();
+      const summary = summaryVal || meta.snippet || (String(textPayload || "").slice(0,220));
+      const tags = tagsArr.length ? tagsArr : undefined;
       try {
-        chrome.runtime.sendMessage({ type: 'saveSelection', item, confetti: true }, () => {});
+        chrome.runtime.sendMessage({
+          type: 'saveSelection',
+          text: textPayload,
+          meta,
+          tags,
+          summary,
+          created_at,
+          id,
+          confetti: true
+        }, () => {});
       } catch(e) {
         // fallback to storage write
         (async () => {
@@ -620,6 +647,18 @@
             const cur = await safeStorageGet(['oml_memory']);
             const root = cur.oml_memory || { profile:{}, memory:[] };
             root.memory = root.memory || [];
+            const item = {
+              id,
+              text: textPayload,
+              summary,
+              tags,
+              page_title: meta.page_title || "",
+              page_url: meta.page_url || "",
+              source: meta.source || "quick_edit",
+              created_at,
+              selectorHint: meta.selectorHint || undefined,
+              hostname: meta.hostname || undefined
+            };
             root.memory.unshift(item);
             await safeStorageSet({ oml_memory: root });
           } catch(e){}
@@ -630,7 +669,7 @@
     });
 
     quickEditEl.hide = function(){ try{ quickEditEl.el.style.opacity = "0"; setTimeout(()=>{ quickEditEl.el.style.left = "-9999px"; quickEditEl.el.style.top = "-9999px"; }, 140); }catch(e){} };
-    quickEditEl.showAt = function(x,y, opts = {}) {
+    quickEditEl.showAt = function(x,y, opts = {}, savedRange) {
       try {
         quickEditEl.el.style.left = `${x}px`;
         quickEditEl.el.style.top = `${y}px`;
@@ -645,14 +684,19 @@
         quickEditEl.lastId = opts.id || uid();
         quickEditEl.lastCreatedAt = opts.created_at || new Date().toISOString();
         quickEditEl.nodes.tagInput.value = "";
-        quickEditEl.nodes.sumInput.focus();
+        ignoreHide = true;
+        setTimeout(() => {
+          quickEditEl.nodes.sumInput.focus();
+          restoreSelection(savedRange);
+          setTimeout(() => ignoreHide = false, 300);
+        }, 10);
       } catch(e){}
     };
 
     return quickEditEl;
   }
 
-  function positionQuickEditNear(rect, opts = {}) {
+  function positionQuickEditNear(rect, opts = {}, savedRange) {
     try {
       const theme = detectTheme();
       const panel = createQuickEditPanel(theme);
@@ -662,7 +706,7 @@
       if (left < 8) left = 8;
       if (left + elRect.width > window.innerWidth - 8) left = window.innerWidth - elRect.width - 8;
       if (top < 8) top = rect.bottom + 10;
-      panel.showAt(left, top, opts);
+      panel.showAt(left, top, opts, savedRange);
     } catch(e){}
   }
 
@@ -726,13 +770,28 @@ function removeBanner() {
   }
 }
 
+const SUPPORTED_AI_HOSTS = new Set([
+  'chat.openai.com',
+  'chatgpt.com',
+  'claude.ai',
+  'gemini.google.com',
+  'grok.com'
+]);
+
 async function renderMiniBanner() {
+  if (ignoreHide) return;
   try {
     const s = await safeStorageGet(["oml_memory", "oml_hidden_domains"]);
     const domain = location.hostname;
     const hidden = s.oml_hidden_domains || {};
     
     if (hidden[domain]) {
+      removeBanner();
+      return;
+    }
+
+    // Skip banner rendering if not on supported AI host
+    if (!SUPPORTED_AI_HOSTS.has(domain)) {
       removeBanner();
       return;
     }
@@ -916,6 +975,7 @@ async function renderMiniBanner() {
       if (!text || text.length < MIN_SELECTION_LENGTH) { hideSelectionTooltip(); return; }
       const active = document.activeElement;
       if (active && active.id && (active.id.indexOf('__oml') === 0 || active.id === 'oml-mini-banner')) { hideSelectionTooltip(); return; }
+      lastSelection = { text, rect };
       const theme = detectTheme();
       showSelectionTooltipAt(rect, theme);
       const tip = createSelectionTooltip(theme);
@@ -930,55 +990,70 @@ async function renderMiniBanner() {
 
       newSave.addEventListener("click", async (ev) => {
         ev.stopPropagation();
+        const savedRange = preserveSelection();
         hideSelectionTooltip();
-        const payloadText = text;
+        const payloadText = lastSelection.text;
+        const currentRect = lastSelection.rect;
+        if (!payloadText.trim()) return;
         const meta = buildMetaForSelection(payloadText);
         const suggested = inferTagsLocal(payloadText, 4);
         const shift = !!ev.shiftKey;
         if (shift) {
-          positionQuickEditNear(rect, { suggestions: suggested, prefillTags: suggested, summary: meta.snippet, selectedText: payloadText, meta, id: uid(), created_at: new Date().toISOString() });
+          positionQuickEditNear(currentRect, { suggestions: suggested, prefillTags: suggested, summary: meta.snippet, selectedText: payloadText, meta, id: uid(), created_at: new Date().toISOString() }, savedRange);
           return;
         }
         // direct save with inferred tags
-        const item = {
-          id: uid(),
-          text: payloadText,
-          summary: meta.snippet,
-          tags: suggested.length ? suggested : undefined,
-          page_title: meta.page_title || "",
-          page_url: meta.page_url || "",
-          source: "direct_save",
-          created_at: new Date().toISOString(),
-          selectorHint: meta.selectorHint || undefined,
-          hostname: meta.hostname || undefined
-        };
         try {
-          chrome.runtime.sendMessage({ type: 'saveSelection', item, confetti: true }, ()=>{});
+          chrome.runtime.sendMessage({
+            type: 'saveSelection',
+            text: payloadText,
+            meta,
+            tags: suggested.length ? suggested : undefined,
+            summary: meta.snippet,
+            confetti: true
+          }, ()=>{});
         } catch (err) {
           // fallback write
           try {
             const cur = await safeStorageGet(['oml_memory']);
             const root = cur.oml_memory || { profile:{}, memory:[] };
             root.memory = root.memory || [];
+            const item = {
+              id: uid(),
+              text: payloadText,
+              summary: meta.snippet,
+              tags: suggested.length ? suggested : undefined,
+              page_title: meta.page_title || "",
+              page_url: meta.page_url || "",
+              source: "direct_save",
+              created_at: new Date().toISOString(),
+              selectorHint: meta.selectorHint || undefined,
+              hostname: meta.hostname || undefined
+            };
             root.memory.unshift(item);
             await safeStorageSet({ oml_memory: root });
           } catch(e){}
         }
+        lastSelection = { text: '', rect: null };
       });
 
       newCancel.addEventListener("click", (ev) => {
         ev.stopPropagation();
         hideSelectionTooltip();
         try { const sel = window.getSelection(); if (sel) sel.removeAllRanges(); } catch(e){}
+        lastSelection = { text: '', rect: null };
       });
     } catch (e) {
       hideSelectionTooltip();
+      lastSelection = { text: '', rect: null };
     }
   }, 90);
 
   const hideOnScrollResize = debounce(() => {
+    if (ignoreHide) return;
     hideSelectionTooltip();
     if (quickEditEl && quickEditEl.el) quickEditEl.hide();
+    lastSelection = { text: '', rect: null };
   }, 60);
 
   document.addEventListener("selectionchange", () => {
@@ -995,6 +1070,7 @@ async function renderMiniBanner() {
   window.addEventListener("resize", hideOnScrollResize);
 
   document.addEventListener("mousedown", (ev) => {
+    if (ignoreHide) return;
     const tip = selectionTooltipEl;
     if (!tip) return;
     if (ev.target && tip.contains(ev.target)) return;
@@ -1003,6 +1079,7 @@ async function renderMiniBanner() {
     if (quickEditEl && quickEditEl.el && quickEditEl.el.contains(ev.target)) return;
     hideSelectionTooltip();
     if (quickEditEl && quickEditEl.el) quickEditEl.hide();
+    lastSelection = { text: '', rect: null };
   }, true);
 
   // ========== HOTKEY HANDLER (Ctrl/Cmd+O) ==========
