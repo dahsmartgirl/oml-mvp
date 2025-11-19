@@ -247,6 +247,30 @@ body {
   padding-right: 30px;
 }
 
+.tag-filter-wrapper {
+  position: relative;
+  flex-basis: 110px;
+  flex-shrink: 0;
+}
+
+.clear-filter-btn {
+  position: absolute;
+  right: 30px; /* Position it before the dropdown arrow */
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.clear-filter-btn:hover {
+  color: var(--text-color);
+}
+
 .sort-menu-container {
   position: relative;
 }
@@ -309,6 +333,14 @@ body {
   font-weight: 500;
 }
 .mem-tag:hover { background-color: #ced4da; cursor: pointer; }
+.mem-tag.active {
+  background-color: var(--accent-color);
+  color: white;
+  font-weight: 600;
+}
+.mem-tag.active:hover {
+  background-color: #e65c00; /* A slightly darker accent color */
+}
 
 .mem-meta {
   font-size: 12px;
