@@ -41,7 +41,7 @@ body {
 }
 
 .logo h1 {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   margin: 0;
 }
@@ -110,7 +110,7 @@ body {
   background-color: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 8px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -125,7 +125,7 @@ body {
 
 .profile-name { font-weight: 600; }
 .profile-name span { font-weight: 400; color: var(--text-muted); }
-.profile-description { font-size: 13px; color: var(--text-muted); }
+.profile-description { font-size: 12px; color: var(--text-muted); }
 .profile-location { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
 .profile-location img { opacity: 0.6; }
 
@@ -141,10 +141,18 @@ body {
 .edit-profile-btn:hover { background-color: rgba(0,0,0,0.05); }
 .edit-profile-btn img { width: 18px; height: 18px; opacity: 0.7; }
 
+/* Memories Title */
+.memories-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-color);
+}
+
 /* Filter Bar */
 .filter-bar {
   display: flex;
-  gap: 8px;
+  gap: 12px;
+  align-items: center;
 }
 
 .search-wrapper {
@@ -162,7 +170,7 @@ body {
   opacity: 0.5;
 }
 
-#search, #tagFilter {
+#search, #tagFilter, #sortFilter {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border-color);
@@ -177,7 +185,7 @@ body {
 }
 
 #tagFilter {
-  flex-basis: 120px;
+  flex-basis: 110px;
   flex-shrink: 0;
   -webkit-appearance: none;
   appearance: none;
@@ -186,6 +194,16 @@ body {
   background-position: right 10px top 50%;
   background-size: .65em auto;
   padding-right: 30px;
+}
+
+.sort-menu-container {
+  position: relative;
+}
+
+.mem-counter {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 /* Memory List */
@@ -245,6 +263,7 @@ body {
   border-radius: 12px;
   font-weight: 500;
 }
+.mem-tag:hover { background-color: #ced4da; cursor: pointer; }
 
 .mem-meta {
   font-size: 12px;
@@ -260,6 +279,7 @@ body {
 .mem-actions {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 4px;
 }
 
@@ -273,6 +293,34 @@ body {
 }
 .mem-action:hover { background-color: rgba(0,0,0,0.05); }
 .mem-action img { width: 18px; height: 18px; opacity: 0.6; }
+
+.mem-more-container {
+  position: relative;
+}
+
+.mem-dropdown-menu {
+  display: none;
+  position: absolute;
+  right: 100%;
+  top: 0;
+  margin-right: 8px;
+  background-color: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border-color);
+  width: 100px;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.mem-dropdown-menu a {
+  display: block;
+  padding: 8px 12px;
+  color: var(--text-color);
+  text-decoration: none;
+  font-size: 13px;
+}
+.mem-dropdown-menu a:hover { background-color: rgba(0,0,0,0.03); }
 
 /* Upload Area */
 .drop-area {

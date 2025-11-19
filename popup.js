@@ -12,7 +12,13 @@ function storageSet(obj) {
   });
 }
 
-function escapeHtml(s=""){ return String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+function escapeHtml(s = "") {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 function formatDate(iso) {
   try { const d = new Date(iso); return d.toLocaleString(); } catch(e){ return iso || ""; }
 }
@@ -44,6 +50,8 @@ function collectTags(memoryArr) {
   return Array.from(s).sort();
 }
 
+let currentSort = 'date_desc'; // Default sort
+
 async function render(filterQuery = "", filterTag = "") {
   const all = await storageGet(["oml_memory"]);
   const memObj = all.oml_memory || { profile:{}, memory:[] };
@@ -53,7 +61,11 @@ async function render(filterQuery = "", filterTag = "") {
   // Profile
   const profileName = document.getElementById("profileName");
   if (profileName) {
-    profileName.innerHTML = `${escapeHtml(p.name || p.displayName || 'Ilerioluwa Adebayo')} <span>${escapeHtml(p.role || 'Product Designer & Founder')}</span>`;
+    profileName.innerHTML = ''; // Clear previous content
+    const nameText = document.createTextNode(p.name || 'Ileri');
+    const separatorText = document.createTextNode(' • ');
+    const roleText = document.createTextNode(p.role || 'Product designer and founder');
+    profileName.append(nameText, separatorText, roleText);
   }
   const profileDesc = document.getElementById("profileDesc");
   if (profileDesc) {
@@ -68,7 +80,7 @@ async function render(filterQuery = "", filterTag = "") {
   }
 
   // Filter memory list
-  let filtered = memoryRaw.slice();
+  let filtered = [...memoryRaw];
   if (filterQuery && filterQuery.trim()) {
     const q = filterQuery.toLowerCase();
     filtered = filtered.filter(m => {
@@ -82,15 +94,39 @@ async function render(filterQuery = "", filterTag = "") {
     filtered = filtered.filter(m => Array.isArray(m.tags) && m.tags.includes(filterTag));
   }
 
-  // Sort by date desc default
-  filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  // Sort
+  if (currentSort === 'date_asc') {
+    filtered.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  } else if (currentSort === 'has_link') {
+    filtered = filtered.filter(m => m.page_url);
+    filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // Still sort by date
+  } else { // date_desc is default
+    filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }
 
   // Render tags select
   const tagsSelect = document.getElementById("tagFilter");
   if (tagsSelect) {
     const allTags = collectTags(memoryRaw);
-    tagsSelect.innerHTML = `<option value="">All tags</option>` + allTags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+    const currentTag = tagsSelect.value;
+    tagsSelect.innerHTML = `<option value="">All Tags</option>` + allTags.map(t => {
+      const selected = (t === currentTag) ? ' selected' : '';
+      return `<option value="${escapeHtml(t)}"${selected}>${escapeHtml(t)}</option>`;
+    }).join("");
     if (filterTag) tagsSelect.value = filterTag;
+  }
+
+  // Render memories title
+  const memoriesTitle = document.getElementById("memoriesTitle");
+  if (memoriesTitle) {
+    memoriesTitle.textContent = `My memories (${filtered.length})`;
+  }
+
+  // Render memory count
+  const memCounter = document.getElementById("memCounter");
+  if (memCounter) {
+    const total = memoryRaw.length;
+    memCounter.textContent = `${filtered.length} / ${total}`;
   }
 
   // Render list
@@ -108,21 +144,25 @@ async function render(filterQuery = "", filterTag = "") {
     item.innerHTML = `
       <div class="mem-content" data-fulltext="${escapeHtml(m.text || "")}">
         <div class="mem-text">${escapeHtml(m.summary || (m.text && m.text.slice(0, 300)) || "")}</div>
-        <div class="mem-tags">
-          ${(m.tags || []).slice(0, 3).map(t => `<div class="mem-tag">${escapeHtml(t)}</div>`).join('')}
-        </div>
-        <div class="mem-meta"><a>${escapeHtml(m.page_title || m.page_url || "")}</a><span> • ${escapeHtml(formatDate(m.created_at))} • ${escapeHtml(m.source || "")}</span></div>
+        <div class="mem-tags"></div>
+        <div class="mem-meta"></div>
       </div>
       <div class="mem-actions">
-        <button class="mem-action copy" data-id="${m.id}">
+        <button class="mem-action insert" title="Insert into active chat">
+          <img src="assets/insert.svg" width="20" height="20" alt="Insert">
+        </button>
+        <button class="mem-action copy" title="Copy text">
           <img src="assets/copy.svg" width="20" height="20" alt="Copy">
         </button>
-        <button class="mem-action edit" data-id="${m.id}">
-          <img src="assets/edit.svg" width="20" height="20" alt="Edit">
-        </button>
-        <button class="mem-action delete" data-id="${m.id}">
-          <img src="assets/delete.svg" width="20" height="20" alt="Delete">
-        </button>
+        <div class="mem-more-container">
+          <button class="mem-action more" title="More actions">
+            <img src="assets/more.svg" width="20" height="20" alt="More">
+          </button>
+          <div class="mem-dropdown-menu">
+            <a href="#" class="edit">Edit</a>
+            <a href="#" class="delete">Delete</a>
+          </div>
+        </div>
       </div>
     `;
     // Click for full
@@ -136,33 +176,85 @@ async function render(filterQuery = "", filterTag = "") {
       // The modal is no longer needed for this, but we can keep it for the edit button
     });
 
+    // Populate tags and make them clickable
+    const tagsContainer = item.querySelector('.mem-tags');
+    (m.tags || []).slice(0, 3).forEach(tag => {
+      const tagEl = document.createElement('div');
+      tagEl.className = 'mem-tag';
+      tagEl.textContent = escapeHtml(tag);
+      tagEl.addEventListener('click', (e) => {
+        e.stopPropagation(); // prevent card from expanding
+        document.getElementById('tagFilter').value = tag;
+        render(document.getElementById('search').value, tag); // Re-render with the new tag filter
+      });
+      tagsContainer.appendChild(tagEl);
+    });
+
+    // Populate metadata and make link clickable
+    const metaContainer = item.querySelector('.mem-meta');
+    const linkText = escapeHtml(m.page_title || m.page_url || "");
+    if (m.page_url) {
+      const linkEl = document.createElement('a');
+      linkEl.href = m.page_url;
+      linkEl.textContent = linkText;
+      linkEl.target = "_blank";
+      linkEl.addEventListener('click', (e) => e.stopPropagation()); // prevent card from expanding
+      metaContainer.appendChild(linkEl);
+    } else {
+      metaContainer.textContent = linkText;
+    }
+    const metaRest = document.createElement('span');
+    metaRest.innerHTML = ` • ${escapeHtml(formatDate(m.created_at))} • ${escapeHtml(m.source || "")}`;
+    metaContainer.appendChild(metaRest);
+
     // Actions
+    item.querySelector(".insert").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const res = await trySendInsertToActiveTab(m.text);
+      showStatus(res.ok ? "Inserted!" : "No active chat to insert into.");
+    });
     item.querySelector(".copy").addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(m.text); showStatus("Copied!"); } catch(e) { showStatus("Copy failed"); }
     });
-    item.querySelector(".edit").addEventListener("click", () => {
+
+    const moreBtn = item.querySelector('.more');
+    const moreMenu = item.querySelector('.mem-dropdown-menu');
+    moreBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      moreMenu.style.display = moreMenu.style.display === 'block' ? 'none' : 'block';
+    });
+
+    item.querySelector(".edit").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       const newSummary = prompt("Edit summary:", m.summary);
       if (newSummary) {
         const updatedMem = { ...m, summary: newSummary };
         updateMemoryItem(updatedMem);
         render();
       }
+      moreMenu.style.display = 'none';
     });
-    item.querySelector(".delete").addEventListener("click", async () => {
+    item.querySelector(".delete").addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       if (confirm("Delete?")) {
         await deleteMemoryById(m.id);
         render();
       }
+      moreMenu.style.display = 'none';
     });
     memList.appendChild(item);
   });
 }
 
 function showStatus(msg = "") {
-  const s = document.getElementById("status");
-  if (s) {
-    s.textContent = msg;
-    setTimeout(() => { s.textContent = ""; }, 2000);
+  const searchInput = document.getElementById("search");
+  if (searchInput) {
+    const originalPlaceholder = searchInput.placeholder;
+    searchInput.value = ''; // Clear search
+    searchInput.placeholder = msg;
+    setTimeout(() => { searchInput.placeholder = originalPlaceholder; }, 2000);
   }
 }
 
@@ -206,6 +298,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const exportBtn = document.getElementById("export");
   const searchInput = document.getElementById("search");
   const tagFilter = document.getElementById("tagFilter");
+  const sortBtn = document.getElementById("sortBtn");
+  const sortMenu = document.getElementById("sortMenu");
   const editProfile = document.getElementById("editProfile");
   const closeModal = document.getElementById("closeModal");
   const memModal = document.getElementById("memModal");
@@ -283,12 +377,33 @@ document.addEventListener("DOMContentLoaded", () => {
   // Tag filter
   if (tagFilter) {
     tagFilter.addEventListener("change", () => {
-      render(searchInput ? searchInput.value : "", tagFilter.value);
+      const query = searchInput ? searchInput.value : "";
+      const tag = tagFilter.value;
+      // If a tag is de-selected, we don't automatically clear the search bar anymore.
+      render(searchInput.value, tag);
     });
   }
 
+  // Sort menu
+  if (sortBtn && sortMenu) {
+    sortBtn.addEventListener("click", () => {
+      sortMenu.style.display = sortMenu.style.display === "block" ? "none" : "block";
+    });
+
+    sortMenu.addEventListener("click", (e) => {
+      if (e.target.tagName === 'A') {
+        e.preventDefault();
+        currentSort = e.target.dataset.sort;
+        sortMenu.style.display = "none";
+        render(searchInput.value, tagFilter.value);
+      }
+    });
+  }
+
+
+
   // Refresh
-  if (refreshBtn) refreshBtn.addEventListener("click", () => render(searchInput ? searchInput.value : "", tagFilter ? tagFilter.value : ""));
+  if (refreshBtn) refreshBtn.addEventListener("click", () => render(searchInput.value, tagFilter.value));
 
   // More menu
   if (moreBtn && moreMenu) {
@@ -296,7 +411,7 @@ document.addEventListener("DOMContentLoaded", () => {
       moreMenu.style.display = moreMenu.style.display === "none" ? "block" : "none";
     });
     document.addEventListener("click", (e) => {
-      if (!moreBtn.contains(e.target) && !moreMenu.contains(e.target)) {
+      if (moreMenu.style.display === 'block' && !moreBtn.contains(e.target) && !moreMenu.contains(e.target)) {
         moreMenu.style.display = "none";
       }
     });
@@ -330,11 +445,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Edit profile
   if (editProfile) editProfile.addEventListener("click", async () => {
-    const name = prompt("Edit name:", document.querySelector('#profileName').textContent.split(' •')[0]);
-    const role = prompt("Edit role:", document.querySelector('#profileName span').textContent);
+    const currentProfile = (await storageGet(['oml_memory'])).oml_memory.profile || {};
+    const name = prompt("Edit name:", currentProfile.name || 'Ileri');
+    const role = prompt("Edit role:", currentProfile.role || 'Product designer and founder');
     const desc = prompt("Edit description:", document.querySelector('#profileDesc').textContent);
-    const location = prompt("Edit location:", document.querySelector('#profileLocation').textContent.trim());
-    if (name || role || desc || location) {
+    if (name !== null || role !== null || desc !== null) {
       await updateProfile({ name, role, description: desc, location });
     }
   });

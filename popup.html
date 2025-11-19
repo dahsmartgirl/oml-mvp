@@ -2,6 +2,7 @@
 <html>
 <head>
   <title>OML</title>
+  <meta charset="UTF-8">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -10,8 +11,7 @@
     <!-- Header -->
     <header class="header">
       <div class="logo">
-        <img src="icon.png" alt="OML Logo" width="28" height="28">
-        <h1>My Memory</h1>
+        <img src="icon.png" alt="OML Logo" width="24" height="24">
       </div>
       <div class="header-actions">
         <button id="refresh" class="icon-btn" title="Refresh">
@@ -47,6 +47,9 @@
       </button>
     </div>
 
+    <!-- Memories Title -->
+    <div id="memoriesTitle" class="memories-title"></div>
+
     <!-- Search and Filter Bar -->
     <div class="filter-bar">
       <div class="search-wrapper">
@@ -56,15 +59,23 @@
       <select id="tagFilter">
         <option value="">All Tags</option>
       </select>
+      <div class="sort-menu-container">
+        <button id="sortBtn" class="icon-btn" title="Sort">
+          <img src="assets/sort.svg" alt="Sort">
+        </button>
+        <div id="sortMenu" class="dropdown-menu">
+          <a href="#" data-sort="date_desc">Newest First</a>
+          <a href="#" data-sort="date_asc">Oldest First</a>
+          <a href="#" data-sort="has_link">Has Link</a>
+        </div>
+      </div>
+      <div id="memCounter" class="mem-counter"></div>
     </div>
 
     <!-- Memory List -->
     <div id="memList" class="mem-list">
       <!-- Memory items will be injected here by popup.js -->
     </div>
-
-    <!-- Status Message -->
-    <div id="status"></div>
 
     <!-- Modal for Full Memory Text -->
     <div id="memModal" class="modal">
