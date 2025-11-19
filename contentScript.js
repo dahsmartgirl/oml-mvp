@@ -189,6 +189,7 @@
   function createBannerElement(theme) {
     const banner = document.createElement("div");
     banner.id = "oml-mini-banner";
+    banner.classList.add("media-object");
     banner.style.position = "fixed";
     banner.style.zIndex = "999999";
     banner.style.display = "flex";
@@ -283,6 +284,7 @@
     if (selectionTooltipEl) return selectionTooltipEl;
     const tip = document.createElement("div");
     tip.id = "__oml_selection_tooltip";
+    tip.classList.add("media-object");
     tip.style.position = "absolute";
     tip.style.zIndex = "2147483646";
     tip.style.display = "flex";
@@ -473,7 +475,6 @@
     sumInput.style.border = "1px solid rgba(0,0,0,0.08)";
     sumInput.style.width = "100%";
     sumInput.style.boxSizing = "border-box";
-    sumInput.style.userSelect = "text";
 
     // suggested chips
     const suggestedLabel = document.createElement("div"); suggestedLabel.textContent = "Suggested tags";
@@ -494,7 +495,6 @@
     tagInput.style.border = "1px solid rgba(0,0,0,0.08)";
     tagInput.style.width = "100%";
     tagInput.style.boxSizing = "border-box";
-    tagInput.style.userSelect = "text";
 
     const tagChipsWrap = document.createElement("div");
     tagChipsWrap.style.display = "flex";
@@ -1147,5 +1147,56 @@ console.log("[OML] Hotkey handler attached (Ctrl/Cmd+O)");
   debouncedRender();
   let tries = 0;
   const poll = setInterval(()=>{ debouncedRender(); tries++; if (tries>40) clearInterval(poll); }, 150);
+
+  // Add animation CSS to document
+  const style = document.createElement('style');
+  style.textContent = `
+    .media-object {
+      --border-width: 1px;
+      --radius: 24px;
+      position: relative;
+      border-radius: var(--radius);
+      border: var(--border-width) solid transparent;
+    }
+    .media-object::before {
+      content: " ";
+      position: absolute;
+      inset: calc(var(--border-width) * -1);
+      z-index: -1;
+      border: inherit;
+      border-radius: inherit;
+      background-image: conic-gradient(from var(--angle), #646464ff 80%, #E0D1FF 88%, #E0D1FF 92%, #646464ff 100%);
+      background-origin: border-box;
+      -webkit-mask:
+        linear-gradient(black, black) content-box,
+        linear-gradient(black, black);
+      mask: linear-gradient(black, black),
+            linear-gradient(black, black);
+      -webkit-mask-clip: content-box, border-box;
+      mask-clip: content-box, border-box;
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: spin 3s linear infinite;
+    }
+    @supports not (background: paint(something)) {
+      .media-object::before {
+        background-image: conic-gradient(#646464ff 80%, #E0D1FF 88%, #E0D1FF 92%, #646464ff 100%);
+      }
+    }
+    .media-object:hover::before {
+      animation-play-state: paused;
+    }
+    @property --angle {
+      syntax: "<angle>";
+      inherits: true;
+      initial-value: 0turn;
+    }
+    @keyframes spin {
+      to {
+        --angle: 1turn;
+      }
+    }
+  `;
+  document.head.appendChild(style);
 
 })();

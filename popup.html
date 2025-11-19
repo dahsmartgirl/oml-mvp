@@ -1,59 +1,80 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8"/>
-  <title>OML — Memory</title>
-  <style>
-    :root { box-sizing: border-box; }
-    *, *:before, *:after { box-sizing: inherit; }
-    body { font-family: system-ui, sans-serif; width:360px; padding:10px; margin:0; }
-    h2 { margin:0 0 8px 0; font-size:16px; }
-    #fileRow { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
-    input[type="file"]{ font-size:13px; flex:1 1 160px; min-width:120px; }
-    .btn { padding:8px 10px; border-radius:8px; cursor:pointer; background:#111; color:#fff; border:none; font-weight:600; flex:0 0 auto; }
-    .btn.secondary { background:#eee; color:#111; border:1px solid #ddd; }
-    .controls { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
-    #status { margin-top:8px; color:#333; font-size:13px; min-height:18px; }
-    #profile { margin-top:10px; background:#fafafa; padding:10px; border-radius:8px; font-size:13px; }
-    details { margin-top:10px; }
-    summary { cursor:pointer; font-weight:600; }
-    .mem-item { padding:8px; border-bottom:1px solid #eee; font-size:13px; display:flex; justify-content:space-between; gap:8px; align-items:flex-start;}
-    .mem-text { flex:1 1 auto; }
-    .mem-copy { background:#111; color:#fff; border-radius:6px; padding:6px 8px; cursor:pointer; font-size:12px; border:none; }
-    .hint { font-size:12px; color:#666; margin-top:8px; }
-  </style>
+  <title>OML</title>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <h2>OML — Memory</h2>
 
-  <div id="fileRow">
-    <input id="file" type="file" accept=".json,.txt" />
-    <button id="upload" class="btn">Upload</button>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <img src="icon.png" alt="OML Logo" width="28" height="28">
+        <h1>My Memory</h1>
+      </div>
+      <div class="header-actions">
+        <button id="refresh" class="icon-btn" title="Refresh">
+          <img src="assets/refresh.svg" alt="Refresh">
+        </button>
+        <div class="more-menu-container">
+          <button id="moreBtn" class="icon-btn" title="More">
+            <img src="assets/more.svg" alt="More">
+          </button>
+          <div id="moreMenu" class="dropdown-menu">
+            <a id="export" href="#">Export Memories</a>
+            <a id="clear" href="#">Clear All Memories</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Upload Area -->
+    <div id="dropArea" class="drop-area">
+      <p>Drag & drop a .json file here or <a href="#" id="browseLink">browse</a> to import.</p>
+      <input type="file" id="file" accept=".json" hidden>
+    </div>
+
+    <!-- Profile Card -->
+    <div class="profile-card">
+      <div class="profile-info">
+        <div id="profileName" class="profile-name"></div>
+        <div id="profileDesc" class="profile-description"></div>
+        <div id="profileLocation" class="profile-location"></div>
+      </div>
+      <button id="editProfile" class="edit-profile-btn" title="Edit Profile">
+        <img src="assets/edit.svg" alt="Edit Profile">
+      </button>
+    </div>
+
+    <!-- Search and Filter Bar -->
+    <div class="filter-bar">
+      <div class="search-wrapper">
+        <img src="assets/search.svg" alt="Search" class="search-icon">
+        <input type="text" id="search" placeholder="Search memories...">
+      </div>
+      <select id="tagFilter">
+        <option value="">All Tags</option>
+      </select>
+    </div>
+
+    <!-- Memory List -->
+    <div id="memList" class="mem-list">
+      <!-- Memory items will be injected here by popup.js -->
+    </div>
+
+    <!-- Status Message -->
+    <div id="status"></div>
+
+    <!-- Modal for Full Memory Text -->
+    <div id="memModal" class="modal">
+      <div class="modal-content">
+        <span id="closeModal" class="close-btn">&times;</span>
+        <pre id="fullMemoryText"></pre>
+      </div>
+    </div>
   </div>
 
-  <div id="welcomeNote" style="display:none; background:#f0f9ff; padding:8px; border-radius:8px; margin-bottom:10px; font-size:12px;">
-  👋 <strong>Welcome to OML!</strong> Try saving text from any webpage (right-click → Save to OML), then insert it into ChatGPT or Claude.
-  <button id="dismissWelcome" style="float:right; border:none; background:transparent; cursor:pointer;">✕</button>
-  </div>
-
-  <div class="controls">
-    <button id="refresh" class="btn secondary">Refresh</button>
-    <button id="clear" class="btn secondary">Clear</button>
-    <button id="export" class="btn secondary">Export Memories</button>
-  </div>
-
-  <div id="status"></div>
-
-  <div id="profile"><strong>Profile</strong><div id="profileBody" style="margin-top:6px;color:#333">No profile loaded.</div></div>
-
-  <details id="memDropdown">
-    <summary id="memSummary">Memories (0)</summary>
-    <div id="memList" style="max-height:300px;overflow:auto;"></div>
-  </details>
-
-  <div class="hint">Click a memory to copy it. Use the Insert button in the site banner to paste into the chat input.</div>
-
-  <script src="parser.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

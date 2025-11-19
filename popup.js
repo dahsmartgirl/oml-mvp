@@ -50,23 +50,24 @@ async function render(filterQuery = "", filterTag = "") {
   const p = memObj.profile || {};
   const memoryRaw = Array.isArray(memObj.memory) ? memObj.memory : [];
 
-  // container elements (assumes popup.html has these ids)
-  const profileBody = document.getElementById("profileBody");
-  const memSummary = document.getElementById("memSummary");
-  const memList = document.getElementById("memList");
-  const tagsSelect = document.getElementById("tagFilter");
-  const searchInput = document.getElementById("search");
-
-  // render profile brief
-  if (profileBody) {
-    profileBody.innerHTML = `
-      <div><strong>${escapeHtml(p.name || p.displayName || '')}</strong> ${p.role ? `• ${escapeHtml(p.role)}` : ''}</div>
-      <div style="margin-top:6px;color:#555">${escapeHtml(p.description || p.about || '')}</div>
-      <div style="margin-top:6px;color:#555;font-size:12px">${p.location ? escapeHtml(p.location) : ''}</div>
+  // Profile
+  const profileName = document.getElementById("profileName");
+  if (profileName) {
+    profileName.innerHTML = `${escapeHtml(p.name || p.displayName || 'Ilerioluwa Adebayo')} <span>${escapeHtml(p.role || 'Product Designer & Founder')}</span>`;
+  }
+  const profileDesc = document.getElementById("profileDesc");
+  if (profileDesc) {
+    profileDesc.textContent = escapeHtml(p.description || p.about || 'Tech-savvy designer obsessed with clean interfaces, AI tools, and building products that lap');
+  }
+  const profileLocation = document.getElementById("profileLocation");
+  if (profileLocation) {
+    profileLocation.innerHTML = `
+      <img src="assets/location.svg" width="20" height="20" alt="Location">
+      ${escapeHtml(p.location || 'Boston, MA')}
     `;
   }
 
-  // filter memory list
+  // Filter memory list
   let filtered = memoryRaw.slice();
   if (filterQuery && filterQuery.trim()) {
     const q = filterQuery.toLowerCase();
@@ -81,17 +82,19 @@ async function render(filterQuery = "", filterTag = "") {
     filtered = filtered.filter(m => Array.isArray(m.tags) && m.tags.includes(filterTag));
   }
 
-  // render tags select
+  // Sort by date desc default
+  filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  // Render tags select
+  const tagsSelect = document.getElementById("tagFilter");
   if (tagsSelect) {
     const allTags = collectTags(memoryRaw);
     tagsSelect.innerHTML = `<option value="">All tags</option>` + allTags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
     if (filterTag) tagsSelect.value = filterTag;
   }
 
-  // render summary/title
-  if (memSummary) memSummary.textContent = `Memories (${filtered.length})`;
-
-  // render list
+  // Render list
+  const memList = document.getElementById("memList");
   if (!memList) return;
   memList.innerHTML = "";
   if (!filtered.length) {
@@ -100,163 +103,67 @@ async function render(filterQuery = "", filterTag = "") {
   }
 
   filtered.forEach((m, i) => {
-    const row = document.createElement("div");
-    row.className = "mem-item";
-    row.style.display = "flex";
-    row.style.flexDirection = "column";
-    row.style.gap = "6px";
-    row.style.padding = "8px";
-    row.style.borderBottom = "1px solid #eee";
+    const item = document.createElement("div");
+    item.className = "mem-item";
+    item.innerHTML = `
+      <div class="mem-content" data-fulltext="${escapeHtml(m.text || "")}">
+        <div class="mem-text">${escapeHtml(m.summary || (m.text && m.text.slice(0, 300)) || "")}</div>
+        <div class="mem-tags">
+          ${(m.tags || []).slice(0, 3).map(t => `<div class="mem-tag">${escapeHtml(t)}</div>`).join('')}
+        </div>
+        <div class="mem-meta"><a>${escapeHtml(m.page_title || m.page_url || "")}</a><span> • ${escapeHtml(formatDate(m.created_at))} • ${escapeHtml(m.source || "")}</span></div>
+      </div>
+      <div class="mem-actions">
+        <button class="mem-action copy" data-id="${m.id}">
+          <img src="assets/copy.svg" width="20" height="20" alt="Copy">
+        </button>
+        <button class="mem-action edit" data-id="${m.id}">
+          <img src="assets/edit.svg" width="20" height="20" alt="Edit">
+        </button>
+        <button class="mem-action delete" data-id="${m.id}">
+          <img src="assets/delete.svg" width="20" height="20" alt="Delete">
+        </button>
+      </div>
+    `;
+    // Click for full
+    const contentDiv = item.querySelector(".mem-content");
+    contentDiv.addEventListener("click", () => {
+      const memTextDiv = contentDiv.querySelector(".mem-text");
+      const isShowingSummary = !memTextDiv.classList.contains('full-text');
+      
+      memTextDiv.innerHTML = isShowingSummary ? contentDiv.dataset.fulltext : escapeHtml(m.summary || (m.text && m.text.slice(0, 300)) || "");
+      memTextDiv.classList.toggle('full-text', isShowingSummary);
+      // The modal is no longer needed for this, but we can keep it for the edit button
+    });
 
-    // top row: text + actions
-    const top = document.createElement("div");
-    top.style.display = "flex";
-    top.style.justifyContent = "space-between";
-    top.style.alignItems = "flex-start";
-    top.style.gap = "8px";
-
-    const left = document.createElement("div");
-    left.style.flex = "1 1 auto";
-    left.style.minWidth = "0";
-
-    const txt = document.createElement("div");
-    txt.className = "mem-text";
-    txt.style.fontSize = "13px";
-    txt.style.lineHeight = "1.25";
-    txt.innerHTML = escapeHtml(m.summary || (m.text && m.text.slice(0,300)) || "");
-
-    const meta = document.createElement("div");
-    meta.style.fontSize = "12px";
-    meta.style.color = "#666";
-    meta.style.marginTop = "6px";
-    const link = m.page_url ? `<a href="${escapeHtml(m.page_url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">${escapeHtml(m.page_title || m.page_url)}</a>` : '';
-    meta.innerHTML = `${link} ${m.created_at ? ` • ${escapeHtml(formatDate(m.created_at))}` : ''} ${m.source ? ` • ${escapeHtml(m.source)}` : ''}`;
-
-    left.appendChild(txt);
-    left.appendChild(meta);
-
-    const right = document.createElement("div");
-    right.style.display = "flex";
-    right.style.flexDirection = "column";
-    right.style.gap = "6px";
-    right.style.marginLeft = "8px";
-
-    const btnRow = document.createElement("div");
-    btnRow.style.display = "flex";
-    btnRow.style.gap = "6px";
-
-    const copyBtn = document.createElement("button");
-    copyBtn.textContent = "Copy";
-    copyBtn.title = "Copy full memory text";
-    copyBtn.style.padding = "6px 8px";
-    copyBtn.style.border = "none";
-    copyBtn.style.borderRadius = "6px";
-    copyBtn.style.cursor = "pointer";
-    copyBtn.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(String(m.text || ""));
-        showStatus("Copied memory to clipboard.");
-      } catch (e) {
-        showStatus("Copy failed.");
+    // Actions
+    item.querySelector(".copy").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(m.text); showStatus("Copied!"); } catch(e) { showStatus("Copy failed"); }
+    });
+    item.querySelector(".edit").addEventListener("click", () => {
+      const newSummary = prompt("Edit summary:", m.summary);
+      if (newSummary) {
+        const updatedMem = { ...m, summary: newSummary };
+        updateMemoryItem(updatedMem);
+        render();
       }
     });
-
-    const insertBtn = document.createElement("button");
-    insertBtn.textContent = "Insert";
-    insertBtn.title = "Insert context into active chat input (falls back to clipboard)";
-    insertBtn.style.padding = "6px 8px";
-    insertBtn.style.border = "none";
-    insertBtn.style.borderRadius = "6px";
-    insertBtn.style.cursor = "pointer";
-    insertBtn.addEventListener("click", async () => {
-      const resp = await trySendInsertToActiveTab(String(m.text || ""));
-      if (resp.ok) showStatus("Inserted into page.");
-      else {
-        try {
-          await navigator.clipboard.writeText(String(m.text || ""));
-          showStatus("No page handler — copied to clipboard (paste to insert).");
-        } catch (e) {
-          showStatus("Insert failed.");
-        }
+    item.querySelector(".delete").addEventListener("click", async () => {
+      if (confirm("Delete?")) {
+        await deleteMemoryById(m.id);
+        render();
       }
     });
-
-    const editBtn = document.createElement("button");
-    editBtn.textContent = "Edit";
-    editBtn.title = "Edit tags / summary";
-    editBtn.style.padding = "6px 8px";
-    editBtn.style.border = "none";
-    editBtn.style.borderRadius = "6px";
-    editBtn.style.cursor = "pointer";
-    editBtn.addEventListener("click", () => {
-      // prompt to edit tags (comma separated) and summary
-      const currentTags = Array.isArray(m.tags) ? m.tags.join(", ") : "";
-      const newTags = prompt("Edit tags (comma separated):", currentTags);
-      if (newTags === null) return;
-      const newTagsArr = newTags.split(",").map(s => s.trim()).filter(Boolean);
-      const newSummary = prompt("Edit quick summary (short):", m.summary || "");
-      // update storage
-      updateMemoryItem(Object.assign({}, m, { tags: newTagsArr, summary: newSummary || m.summary }));
-    });
-
-    const delBtn = document.createElement("button");
-    delBtn.textContent = "Delete";
-    delBtn.title = "Delete this memory";
-    delBtn.style.padding = "6px 8px";
-    delBtn.style.border = "none";
-    delBtn.style.borderRadius = "6px";
-    delBtn.style.cursor = "pointer";
-    delBtn.addEventListener("click", async () => {
-      if (!confirm("Delete this memory?")) return;
-      await deleteMemoryById(m.id);
-      showStatus("Memory deleted.");
-      render(searchInput ? searchInput.value : "", tagsSelect ? tagsSelect.value : "");
-    });
-
-    btnRow.appendChild(copyBtn);
-    btnRow.appendChild(insertBtn);
-    btnRow.appendChild(editBtn);
-    btnRow.appendChild(delBtn);
-    right.appendChild(btnRow);
-
-    top.appendChild(left);
-    top.appendChild(right);
-
-    // tags row
-    const tagsRow = document.createElement("div");
-    tagsRow.style.display = "flex";
-    tagsRow.style.gap = "6px";
-    tagsRow.style.flexWrap = "wrap";
-    tagsRow.style.marginTop = "6px";
-    (Array.isArray(m.tags) ? m.tags : []).forEach(tag => {
-      const b = document.createElement("div");
-      b.textContent = String(tag);
-      b.style.padding = "4px 8px";
-      b.style.borderRadius = "999px";
-      b.style.background = "#f0f0f0";
-      b.style.fontSize = "12px";
-      b.style.cursor = "pointer";
-      b.addEventListener("click", () => {
-        // filter by clicked tag
-        if (tagsSelect) {
-          tagsSelect.value = tag;
-        }
-        render(searchInput ? searchInput.value : "", tag);
-      });
-      tagsRow.appendChild(b);
-    });
-
-    row.appendChild(top);
-    row.appendChild(tagsRow);
-    memList.appendChild(row);
+    memList.appendChild(item);
   });
 }
 
 function showStatus(msg = "") {
   const s = document.getElementById("status");
-  if (!s) return;
-  s.textContent = msg;
-  setTimeout(() => { s.textContent = ""; }, 2000);
+  if (s) {
+    s.textContent = msg;
+    setTimeout(() => { s.textContent = ""; }, 2000);
+  }
 }
 
 async function updateMemoryItem(newItem) {
@@ -268,7 +175,6 @@ async function updateMemoryItem(newItem) {
     root.memory[idx] = newItem;
     await storageSet({ oml_memory: root });
   } else {
-    // insert if missing
     root.memory.unshift(newItem);
     await storageSet({ oml_memory: root });
   }
@@ -281,137 +187,356 @@ async function deleteMemoryById(id) {
   await storageSet({ oml_memory: root });
 }
 
+async function updateProfile(newProfile) {
+  const all = await storageGet(['oml_memory']);
+  const root = all.oml_memory || { profile:{}, memory:[] };
+  root.profile = { ...root.profile, ...newProfile };
+  await storageSet({ oml_memory: root });
+  render();
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-  // ensure popup.html contains these elements:
-  // #file (input type=file), #upload (button), #refresh, #clear, #profileBody, #memSummary, #memList, #search, #tagFilter, #status
-  const uploadBtn = document.getElementById("upload");
+  const dropArea = document.getElementById("dropArea");
   const fileInput = document.getElementById("file");
+  const browseLink = document.getElementById("browseLink");
   const refreshBtn = document.getElementById("refresh");
+  const moreBtn = document.getElementById("moreBtn");
+  const moreMenu = document.getElementById("moreMenu");
   const clearBtn = document.getElementById("clear");
+  const exportBtn = document.getElementById("export");
   const searchInput = document.getElementById("search");
   const tagFilter = document.getElementById("tagFilter");
+  const editProfile = document.getElementById("editProfile");
+  const closeModal = document.getElementById("closeModal");
+  const memModal = document.getElementById("memModal");
 
-  // search handler
-  if (searchInput) {
-    let t;
-    searchInput.addEventListener("input", () => {
-      clearTimeout(t);
-      t = setTimeout(() => {
-        render(searchInput.value || "", tagFilter ? tagFilter.value : "");
-      }, 180);
+  // Drag/drop
+  if (dropArea) {
+    dropArea.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropArea.classList.add("dragover");
+    });
+    dropArea.addEventListener("dragleave", () => dropArea.classList.remove("dragover"));
+    dropArea.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropArea.classList.remove("dragover");
+      const files = e.dataTransfer.files;
+      if (files.length && files[0].type === "application/json") {
+        handleUpload(files[0]);
+      } else {
+        showStatus("⚠ Only .json files supported");
+      }
     });
   }
 
+  // Browse
+  if (browseLink) {
+    browseLink.addEventListener("click", () => fileInput.click());
+  }
+
+  // File change
+  if (fileInput) {
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files[0]) handleUpload(fileInput.files[0]);
+    });
+  }
+
+  async function handleUpload(f) {
+    try {
+      showStatus("Importing...");
+      const parsed = await parseExportFile(f);
+      const current = await storageGet(['oml_memory']);
+      const root = current.oml_memory || { profile: {}, memory: [] };
+
+      // Merge profile
+      const newProfile = { ...root.profile, ...(parsed.profile || {}) };
+
+      // Merge and deduplicate memories
+      const combined = [...(parsed.memory || []), ...(root.memory || [])];
+      const dedupedMemory = [];
+      const seen = new Set();
+      for (const item of combined) {
+        const key = item.id || item.text.slice(0, 100);
+        if (!seen.has(key)) {
+          seen.add(key);
+          dedupedMemory.push(item);
+        }
+      }
+      
+      await storageSet({ oml_memory: { profile: newProfile, memory: dedupedMemory } });
+      showStatus(`✔ Imported ${parsed.memory.length} memories!`);
+      render();
+    } catch (e) {
+      showStatus(`✗ Import failed: ${e.message}`);
+    }
+  }
+
+  // Search
+  let t;
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      clearTimeout(t);
+      t = setTimeout(() => render(searchInput.value, tagFilter ? tagFilter.value : ""), 180);
+    });
+  }
+
+  // Tag filter
   if (tagFilter) {
     tagFilter.addEventListener("change", () => {
       render(searchInput ? searchInput.value : "", tagFilter.value);
     });
   }
 
-  // Upload handler - FIXED TO MERGE NOT REPLACE
-if (uploadBtn && fileInput) {
-  uploadBtn.addEventListener("click", async () => {
-    const f = fileInput.files[0];
-    if (!f) { 
-      showStatus("⚠ Choose a file first");
-      return; 
-    }
-    try {
-      if (typeof parseExportFile !== "function") {
-        showStatus("✗ Parser not found");
-        return;
-      }
-      
-      const parsed = await parseExportFile(f);
-      const canonical = { profile: parsed.profile || {}, memory: [] };
-      const rawMem = Array.isArray(parsed.memory) ? parsed.memory : [];
-      
-      for (const r of rawMem) {
-        canonical.memory.push((typeof r === "string") ? { text: r } : r);
-      }
-      
-      const converted = canonical.memory.map(item => {
-        return {
-          id: item.id || ('m_imp_'+Date.now()+'_'+Math.random().toString(36).slice(2,6)),
-          text: item.text || item.summary || String(item || ""),
-          summary: item.summary || (item.text && item.text.slice(0,220)) || "",
-          tags: Array.isArray(item.tags) ? item.tags : [],
-          page_title: item.page_title || item.source || "Import",
-          page_url: item.page_url || "",
-          source: item.source || "import",
-          created_at: item.created_at || new Date().toISOString()
-        };
-      });
-      
-      // GET EXISTING DATA FIRST - DON'T ERASE IT
-      const existing = await storageGet(['oml_memory']);
-      const existingRoot = existing.oml_memory || { profile: {}, memory: [] };
-      
-      // MERGE profiles (new data overwrites old)
-      const mergedProfile = Object.assign({}, existingRoot.profile || {}, canonical.profile || {});
-      
-      // MERGE memories - deduplicate by text content
-      const existingMemories = Array.isArray(existingRoot.memory) ? existingRoot.memory : [];
-      const allMemories = [...existingMemories, ...converted];
-      
-      // Deduplicate by text content (keep first occurrence)
-      const seen = new Set();
-      const deduplicated = [];
-      for (const mem of allMemories) {
-        const key = (mem.text || '').slice(0, 200).toLowerCase().trim();
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        deduplicated.push(mem);
-      }
-      
-      // Save merged data
-      await storageSet({ oml_memory: { profile: mergedProfile, memory: deduplicated } });
-      
-      const newCount = converted.length;
-      const totalCount = deduplicated.length;
-      showStatus(`✓ Added ${newCount} memories (${totalCount} total)`);
-      render();
-      
-    } catch (e) {
-      console.error("Import error:", e);
-      showStatus("✗ Import failed - check console");
-    }
-  });
-}
-
+  // Refresh
   if (refreshBtn) refreshBtn.addEventListener("click", () => render(searchInput ? searchInput.value : "", tagFilter ? tagFilter.value : ""));
+
+  // More menu
+  if (moreBtn && moreMenu) {
+    moreBtn.addEventListener("click", () => {
+      moreMenu.style.display = moreMenu.style.display === "none" ? "block" : "none";
+    });
+    document.addEventListener("click", (e) => {
+      if (!moreBtn.contains(e.target) && !moreMenu.contains(e.target)) {
+        moreMenu.style.display = "none";
+      }
+    });
+  }
+
+  // Clear
   if (clearBtn) clearBtn.addEventListener("click", async () => {
     if (!confirm("Clear all local memories?")) return;
     await storageSet({ oml_memory: { profile:{}, memory:[] } });
     render();
+    moreMenu.style.display = "none";
   });
 
-  document.getElementById('export')?.addEventListener('click', async () => {
-  const data = await storageGet(['oml_memory']);
-  const memObj = data.oml_memory || { profile: {}, memory: [] };
-  
-  const json = JSON.stringify(memObj, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `oml-export-${Date.now()}.json`;
-  a.click();
-  
-  showStatus('Exported!');
+  // Export
+  if (exportBtn) exportBtn.addEventListener('click', async () => {
+    const data = await storageGet(['oml_memory']);
+    const memObj = data.oml_memory || { profile: {}, memory: [] };
+    
+    const json = JSON.stringify(memObj, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `oml-export-${Date.now()}.json`;
+    a.click();
+    
+    showStatus('Exported!');
+    moreMenu.style.display = "none";
   });
 
-  // Show welcome note on first use
-const dismissed = localStorage.getItem('oml_welcome_dismissed');
-if (!dismissed) {
-  document.getElementById('welcomeNote').style.display = 'block';
-  document.getElementById('dismissWelcome')?.addEventListener('click', () => {
-    localStorage.setItem('oml_welcome_dismissed', 'true');
-    document.getElementById('welcomeNote').style.display = 'none';
+  // Edit profile
+  if (editProfile) editProfile.addEventListener("click", async () => {
+    const name = prompt("Edit name:", document.querySelector('#profileName').textContent.split(' •')[0]);
+    const role = prompt("Edit role:", document.querySelector('#profileName span').textContent);
+    const desc = prompt("Edit description:", document.querySelector('#profileDesc').textContent);
+    const location = prompt("Edit location:", document.querySelector('#profileLocation').textContent.trim());
+    if (name || role || desc || location) {
+      await updateProfile({ name, role, description: desc, location });
+    }
   });
-}
+
+  // Modal
+  if (closeModal && memModal) {
+    closeModal.addEventListener("click", () => memModal.style.display = "none");
+    memModal.addEventListener("click", (e) => { if (e.target === memModal) memModal.style.display = "none"; });
+  }
 
   // initial render
   render();
 });
+
+// --- Parser functions moved from parser.js ---
+
+function isPlainObject(x) { 
+  return x && typeof x === 'object' && !Array.isArray(x); 
+}
+
+async function parseExportFile(file) {
+  const text = await file.text();
+  let data;
+  
+  try {
+    data = JSON.parse(text);
+  } catch (err) {
+    // Not JSON - treat as plain text
+    const snippet = text.trim().slice(0, 1000);
+    return { 
+      profile: {}, 
+      memory: snippet ? [{ text: snippet, tags: [], summary: snippet.slice(0, 200) }] : [] 
+    };
+  }
+
+  // FIRST: Check if this is OML's own export format
+  if (data && (data.profile !== undefined || data.memory !== undefined)) {
+    console.log("Detected OML export format");
+    
+    const profile = data.profile || {};
+    let memories = [];
+    
+    if (Array.isArray(data.memory)) {
+      memories = data.memory.map(m => {
+        // Already in correct format
+        if (m && typeof m === 'object' && m.text) {
+          return {
+            id: m.id || ('m_imp_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)),
+            text: String(m.text || ''),
+            summary: m.summary || String(m.text || '').slice(0, 220),
+            tags: Array.isArray(m.tags) ? m.tags : [],
+            page_title: m.page_title || '',
+            page_url: m.page_url || '',
+            source: m.source || 'import',
+            created_at: m.created_at || new Date().toISOString(),
+            selectorHint: m.selectorHint,
+            snippet: m.snippet,
+            hostname: m.hostname
+          };
+        }
+        // String format
+        if (typeof m === 'string') {
+          return {
+            id: 'm_imp_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+            text: m,
+            summary: m.slice(0, 220),
+            tags: [],
+            page_title: '',
+            page_url: '',
+            source: 'import',
+            created_at: new Date().toISOString()
+          };
+        }
+        return null;
+      }).filter(Boolean);
+    }
+    
+    console.log(`Parsed ${memories.length} memories from OML export`);
+    return { profile, memory: memories };
+  }
+
+  // SECOND: Try to parse as ChatGPT/Claude export
+  console.log("Trying generic chat export format");
+  
+  const profile = {};
+  
+  // Extract profile if exists
+  if (data.user || data.profile) {
+    const psrc = data.user || data.profile;
+    if (isPlainObject(psrc)) {
+      if (psrc.name) profile.name = String(psrc.name);
+      if (psrc.role) profile.role = String(psrc.role);
+      if (psrc.description) profile.description = String(psrc.description);
+      if (psrc.location) profile.location = String(psrc.location);
+    }
+  }
+  
+  // Top-level profile fields
+  if (data.name && !profile.name) profile.name = String(data.name);
+  if (data.email && !profile.email) profile.email = String(data.email);
+
+  // Extract memories from various possible structures
+  let candidateStrings = [];
+  
+  // Check common chat export paths
+  const paths = ['messages', 'conversations', 'chat', 'history', 'mapping'];
+  for (const path of paths) {
+    if (path in data) {
+      const val = data[path];
+      
+      if (Array.isArray(val)) {
+        val.forEach(item => {
+          if (!item) return;
+          
+          if (typeof item === 'string') {
+            candidateStrings.push(item);
+          } else if (isPlainObject(item)) {
+            // Extract text content
+            if (item.content) candidateStrings.push(String(item.content));
+            if (item.text) candidateStrings.push(String(item.text));
+            if (item.message) candidateStrings.push(String(item.message));
+            
+            // Check for nested messages
+            if (Array.isArray(item.messages)) {
+              item.messages.forEach(msg => {
+                if (msg && (msg.content || msg.text)) {
+                  candidateStrings.push(String(msg.content || msg.text));
+                }
+              });
+            }
+          }
+        });
+      } else if (isPlainObject(val)) {
+        // Mapping object (ChatGPT format)
+        Object.values(val).forEach(node => {
+          if (node && node.message && node.message.content) {
+            if (typeof node.message.content === 'string') {
+              candidateStrings.push(node.message.content);
+            } else if (Array.isArray(node.message.content.parts)) {
+              node.message.content.parts.forEach(part => {
+                if (typeof part === 'string') candidateStrings.push(part);
+              });
+            }
+          }
+        });
+      }
+    }
+  }
+
+  // If nothing found, do a recursive search
+  if (candidateStrings.length === 0) {
+    console.log("No structured data found, doing deep search");
+    candidateStrings = collectStringsRecursive(data);
+  }
+
+  // Clean and deduplicate
+  const cleaned = candidateStrings
+    .map(s => String(s).trim())
+    .filter(s => s.length > 15 && s.length < 5000) // Reasonable length
+    .filter((s, i, arr) => arr.indexOf(s) === i); // Dedupe
+
+  const memories = cleaned.slice(0, 500).map(text => ({
+    id: 'm_imp_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+    text: text,
+    summary: text.slice(0, 220),
+    tags: [],
+    page_title: 'Import',
+    page_url: '',
+    source: 'import',
+    created_at: new Date().toISOString()
+  }));
+
+  console.log(`Extracted ${memories.length} memories from chat export`);
+  return { profile, memory: memories };
+}
+
+function collectStringsRecursive(obj, depth = 0, results = []) {
+  if (depth > 10) return results; // Prevent infinite recursion
+  if (!obj) return results;
+  
+  if (typeof obj === 'string') {
+    results.push(obj);
+    return results;
+  }
+  
+  if (Array.isArray(obj)) {
+    obj.forEach(item => collectStringsRecursive(item, depth + 1, results));
+    return results;
+  }
+  
+  if (isPlainObject(obj)) {
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      
+      // Prioritize content-like keys
+      if (key.match(/content|text|message|body/i) && typeof val === 'string') {
+        results.push(val);
+      } else {
+        collectStringsRecursive(val, depth + 1, results);
+      }
+    }
+  }
+  
+  return results;
+}
