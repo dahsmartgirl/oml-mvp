@@ -122,13 +122,6 @@ async function render(filterQuery = "", filterTag = "") {
     memoriesTitle.textContent = `My memories (${filtered.length})`;
   }
 
-  // Render memory count
-  const memCounter = document.getElementById("memCounter");
-  if (memCounter) {
-    const total = memoryRaw.length;
-    memCounter.textContent = `${filtered.length} / ${total}`;
-  }
-
   // Render list
   const memList = document.getElementById("memList");
   if (!memList) return;
@@ -227,14 +220,20 @@ async function render(filterQuery = "", filterTag = "") {
     item.querySelector(".edit").addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const newSummary = prompt("Edit summary:", m.summary);
-      if (newSummary) {
-        const updatedMem = { ...m, summary: newSummary };
-        updateMemoryItem(updatedMem);
-        render();
-      }
       moreMenu.style.display = 'none';
+
+      // Populate and show the edit modal
+      const memoryEditModal = document.getElementById('memoryEditModal');
+      if (memoryEditModal) {
+        document.getElementById('memoryIdInput').value = m.id;
+        document.getElementById('memorySummaryInput').value = m.summary || '';
+        document.getElementById('memoryTextInput').value = m.text || '';
+        document.getElementById('memoryTagsInput').value = (m.tags || []).join(', ');
+        memoryEditModal.style.display = 'flex';
+      }
     });
+
+
     item.querySelector(".delete").addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -303,6 +302,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const editProfile = document.getElementById("editProfile");
   const closeModal = document.getElementById("closeModal");
   const memModal = document.getElementById("memModal");
+  const profileModal = document.getElementById("profileModal");
+  const closeProfileModal = document.getElementById("closeProfileModal");
+  const profileForm = document.getElementById("profileForm");
+  const memoryEditModal = document.getElementById("memoryEditModal");
+  const closeMemoryEditModal = document.getElementById("closeMemoryEditModal");
+  const memoryEditForm = document.getElementById("memoryEditForm");
 
   // Drag/drop
   if (dropArea) {
@@ -444,13 +449,47 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Edit profile
-  if (editProfile) editProfile.addEventListener("click", async () => {
-    const currentProfile = (await storageGet(['oml_memory'])).oml_memory.profile || {};
-    const name = prompt("Edit name:", currentProfile.name || 'Ileri');
-    const role = prompt("Edit role:", currentProfile.role || 'Product designer and founder');
-    const desc = prompt("Edit description:", document.querySelector('#profileDesc').textContent);
-    if (name !== null || role !== null || desc !== null) {
-      await updateProfile({ name, role, description: desc, location });
+  if (editProfile && profileModal) editProfile.addEventListener("click", async () => {
+    const currentData = await storageGet(['oml_memory']);
+    const currentProfile = (currentData.oml_memory && currentData.oml_memory.profile) || {};
+    
+    // Populate form
+    document.getElementById('profileNameInput').value = currentProfile.name || '';
+    document.getElementById('profileRoleInput').value = currentProfile.role || '';
+    document.getElementById('profileDescInput').value = currentProfile.description || '';
+    document.getElementById('profileLocationInput').value = currentProfile.location || '';
+
+    profileModal.style.display = "flex";
+  });
+
+  if (profileForm) profileForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const newProfile = {
+      name: document.getElementById('profileNameInput').value,
+      role: document.getElementById('profileRoleInput').value,
+      description: document.getElementById('profileDescInput').value,
+      location: document.getElementById('profileLocationInput').value,
+    };
+    await updateProfile(newProfile);
+    profileModal.style.display = "none";
+  });
+
+  // Memory Edit Form
+  if (memoryEditForm) memoryEditForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('memoryIdInput').value;
+    const summary = document.getElementById('memorySummaryInput').value;
+    const text = document.getElementById('memoryTextInput').value;
+    const tags = document.getElementById('memoryTagsInput').value.split(',').map(t => t.trim()).filter(Boolean);
+
+    const all = await storageGet(['oml_memory']);
+    const memoryItem = (all.oml_memory.memory || []).find(mem => mem.id === id);
+
+    if (memoryItem) {
+      const updatedItem = { ...memoryItem, summary, text, tags };
+      await updateMemoryItem(updatedItem);
+      memoryEditModal.style.display = 'none';
+      render(searchInput.value, tagFilter.value);
     }
   });
 
@@ -458,6 +497,14 @@ document.addEventListener("DOMContentLoaded", () => {
   if (closeModal && memModal) {
     closeModal.addEventListener("click", () => memModal.style.display = "none");
     memModal.addEventListener("click", (e) => { if (e.target === memModal) memModal.style.display = "none"; });
+  }
+  if (closeProfileModal && profileModal) {
+    closeProfileModal.addEventListener("click", () => profileModal.style.display = "none");
+    profileModal.addEventListener("click", (e) => { if (e.target === profileModal) profileModal.style.display = "none"; });
+  }
+  if (closeMemoryEditModal && memoryEditModal) {
+    closeMemoryEditModal.addEventListener("click", () => memoryEditModal.style.display = "none");
+    memoryEditModal.addEventListener("click", (e) => { if (e.target === memoryEditModal) memoryEditModal.style.display = "none"; });
   }
 
   // initial render

@@ -69,7 +69,6 @@
           <a href="#" data-sort="has_link">Has Link</a>
         </div>
       </div>
-      <div id="memCounter" class="mem-counter"></div>
     </div>
 
     <!-- Memory List -->
@@ -82,6 +81,57 @@
       <div class="modal-content">
         <span id="closeModal" class="close-btn">&times;</span>
         <pre id="fullMemoryText"></pre>
+      </div>
+    </div>
+
+    <!-- Profile Edit Modal -->
+    <div id="profileModal" class="modal">
+      <div class="modal-content">
+        <span id="closeProfileModal" class="close-btn">&times;</span>
+        <h3>Edit Profile</h3>
+        <form id="profileForm">
+          <div class="form-group">
+            <label for="profileNameInput">Name</label>
+            <input type="text" id="profileNameInput" required>
+          </div>
+          <div class="form-group">
+            <label for="profileRoleInput">Role</label>
+            <input type="text" id="profileRoleInput">
+          </div>
+          <div class="form-group">
+            <label for="profileDescInput">Description</label>
+            <textarea id="profileDescInput" rows="4"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="profileLocationInput">Location</label>
+            <input type="text" id="profileLocationInput">
+          </div>
+          <button type="submit" class="btn-primary">Save Changes</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Memory Edit Modal -->
+    <div id="memoryEditModal" class="modal">
+      <div class="modal-content">
+        <span id="closeMemoryEditModal" class="close-btn">&times;</span>
+        <h3>Edit Memory</h3>
+        <form id="memoryEditForm">
+          <input type="hidden" id="memoryIdInput">
+          <div class="form-group">
+            <label for="memorySummaryInput">Summary</label>
+            <input type="text" id="memorySummaryInput" required>
+          </div>
+          <div class="form-group">
+            <label for="memoryTextInput">Full Text</label>
+            <textarea id="memoryTextInput" rows="6"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="memoryTagsInput">Tags (comma-separated)</label>
+            <input type="text" id="memoryTagsInput">
+          </div>
+          <button type="submit" class="btn-primary">Save Memory</button>
+        </form>
       </div>
     </div>
   </div>
