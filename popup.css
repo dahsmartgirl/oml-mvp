@@ -333,6 +333,7 @@ body {
   font-weight: 500;
 }
 .mem-tag:hover { background-color: #ced4da; cursor: pointer; }
+
 .mem-tag.active {
   background-color: var(--accent-color);
   color: white;
@@ -399,6 +400,14 @@ body {
   font-size: 13px;
 }
 .mem-dropdown-menu a:hover { background-color: rgba(0,0,0,0.03); }
+.mem-dropdown-menu a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mem-dropdown-menu a img {
+  opacity: 0.6;
+}
 
 /* Upload Area */
 .drop-area {

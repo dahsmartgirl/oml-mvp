@@ -116,7 +116,9 @@ async function render(filterQuery = "", filterTag = "") {
   // Render list
   const memList = document.getElementById("memList");
   if (!memList) return;
-  memList.innerHTML = "";
+  
+  const fragment = document.createDocumentFragment();
+
   if (!filtered.length) {
     memList.innerHTML = "<div style='padding:8px;color:#666'>No memories found.</div>";
     return;
@@ -237,8 +239,11 @@ async function render(filterQuery = "", filterTag = "") {
       }
       moreMenu.style.display = 'none';
     });
-    memList.appendChild(item);
+    fragment.appendChild(item);
   });
+
+  memList.innerHTML = ""; // Clear the list
+  memList.appendChild(fragment); // Append all new items at once
 }
 
 function showStatus(msg = "") {
@@ -672,7 +677,7 @@ async function parseExportFile(file) {
     .filter(s => s.length > 15 && s.length < 5000) // Reasonable length
     .filter((s, i, arr) => arr.indexOf(s) === i); // Dedupe
 
-  const memories = cleaned.slice(0, 500).map(text => ({
+  const memories = cleaned.map(text => ({
     id: 'm_imp_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
     text: text,
     summary: text.slice(0, 220),
