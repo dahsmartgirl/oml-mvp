@@ -236,6 +236,17 @@ More platforms coming soon.
 
 ---
 
+## Tech Stack
+
+OML v0.1.0 is built with a simple and robust stack, with no external frameworks.
+
+- **Core Logic:** Vanilla JavaScript (ES6+)
+- **UI:** HTML5 & CSS3
+- **Storage:** `chrome.storage.local` API for 100% local-first data.
+- **Packaging:** Manifest V3 for a modern and secure Chrome Extension.
+
+---
+
 ## For Developers
 
 ### **Coming Soon: APIs & SDKs**

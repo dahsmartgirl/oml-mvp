@@ -1,16 +1,4 @@
 // popup.js (full replacement) - structured memory UI with search, tag filter, edit/delete, copy/insert
-// Preserves upload/refresh/clear flows and uses oml_memory root object: { profile:{}, memory: [...] }
-
-function storageGet(keys) {
-  return new Promise((res) => {
-    try { chrome.storage.local.get(keys, r => res(r)); } catch(e) { res({}); }
-  });
-}
-function storageSet(obj) {
-  return new Promise((res) => {
-    try { chrome.storage.local.set(obj, () => res()); } catch(e){ res(); }
-  });
-}
 
 function escapeHtml(s = "") {
   return String(s)
@@ -41,23 +29,19 @@ async function trySendInsertToActiveTab(text) {
 
 // build set of unique tags from memory list
 function collectTags(memoryArr) {
-  const s = new Set();
-  (memoryArr || []).forEach(m => {
-    if (!m) return;
-    const tags = Array.isArray(m.tags) ? m.tags : [];
-    tags.forEach(t => { if (t) s.add(String(t)); });
-  });
-  return Array.from(s).sort();
+  // This can be optimized with Dexie later, but for now, we'll derive it from the fetched list.
+  const allTags = new Set();
+  memoryArr.forEach(m => (m.tags || []).forEach(tag => allTags.add(tag)));
+  return Array.from(allTags).sort();
 }
 
 let currentSort = 'date_desc'; // Default sort
 
 async function render(filterQuery = "", filterTag = "") {
-  const all = await storageGet(["oml_memory"]);
-  const memObj = all.oml_memory || { profile:{}, memory:[] };
-  const p = memObj.profile || {};
-  const memoryRaw = Array.isArray(memObj.memory) ? memObj.memory : [];
-
+  // Fetch data from IndexedDB
+  const p = await getProfile();
+  const memoryRaw = await db.memories.toArray();
+  
   // Profile
   const profileName = document.getElementById("profileName");
   if (profileName) {
@@ -114,6 +98,13 @@ async function render(filterQuery = "", filterTag = "") {
       return `<option value="${escapeHtml(t)}"${selected}>${escapeHtml(t)}</option>`;
     }).join("");
     if (filterTag) tagsSelect.value = filterTag;
+
+    // Show/hide clear button
+    const clearTagBtn = document.getElementById('clearTagFilter');
+    if (clearTagBtn) {
+      clearTagBtn.hidden = !filterTag;
+    }
+
   }
 
   // Render memories title
@@ -175,6 +166,9 @@ async function render(filterQuery = "", filterTag = "") {
       const tagEl = document.createElement('div');
       tagEl.className = 'mem-tag';
       tagEl.textContent = escapeHtml(tag);
+      if (tag === filterTag) {
+        tagEl.classList.add('active');
+      }
       tagEl.addEventListener('click', (e) => {
         e.stopPropagation(); // prevent card from expanding
         document.getElementById('tagFilter').value = tag;
@@ -258,31 +252,17 @@ function showStatus(msg = "") {
 }
 
 async function updateMemoryItem(newItem) {
-  const all = await storageGet(['oml_memory']);
-  const root = all.oml_memory || { profile:{}, memory:[] };
-  root.memory = root.memory || [];
-  const idx = root.memory.findIndex(x => x && x.id === newItem.id);
-  if (idx >= 0) {
-    root.memory[idx] = newItem;
-    await storageSet({ oml_memory: root });
-  } else {
-    root.memory.unshift(newItem);
-    await storageSet({ oml_memory: root });
-  }
+  // Dexie's 'put' is an upsert (update or insert) operation.
+  await db.memories.put(newItem);
 }
 
 async function deleteMemoryById(id) {
-  const all = await storageGet(['oml_memory']);
-  const root = all.oml_memory || { profile:{}, memory:[] };
-  root.memory = (root.memory || []).filter(m => !(m && m.id === id));
-  await storageSet({ oml_memory: root });
+  await db.memories.delete(id);
 }
 
-async function updateProfile(newProfile) {
-  const all = await storageGet(['oml_memory']);
-  const root = all.oml_memory || { profile:{}, memory:[] };
-  root.profile = { ...root.profile, ...newProfile };
-  await storageSet({ oml_memory: root });
+// The updateProfile function is now in db.js, but we need to re-render after.
+async function updateProfileAndRender(newProfile) {
+  await updateProfile(newProfile);
   render();
 }
 
@@ -297,6 +277,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const exportBtn = document.getElementById("export");
   const searchInput = document.getElementById("search");
   const tagFilter = document.getElementById("tagFilter");
+  const clearTagFilter = document.getElementById("clearTagFilter");
   const sortBtn = document.getElementById("sortBtn");
   const sortMenu = document.getElementById("sortMenu");
   const editProfile = document.getElementById("editProfile");
@@ -344,25 +325,25 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       showStatus("Importing...");
       const parsed = await parseExportFile(f);
-      const current = await storageGet(['oml_memory']);
-      const root = current.oml_memory || { profile: {}, memory: [] };
+      const currentProfile = await getProfile();
+      const currentMemories = await db.memories.toArray();
 
       // Merge profile
-      const newProfile = { ...root.profile, ...(parsed.profile || {}) };
+      const newProfile = { ...currentProfile, ...(parsed.profile || {}) };
+      await updateProfile(newProfile);
 
       // Merge and deduplicate memories
-      const combined = [...(parsed.memory || []), ...(root.memory || [])];
+      const combined = [...(parsed.memory || []), ...currentMemories];
       const dedupedMemory = [];
       const seen = new Set();
       for (const item of combined) {
-        const key = item.id || item.text.slice(0, 100);
+        const key = item.id || item.text.slice(0, 100); // Use existing ID or text snippet as key
         if (!seen.has(key)) {
           seen.add(key);
           dedupedMemory.push(item);
         }
       }
-      
-      await storageSet({ oml_memory: { profile: newProfile, memory: dedupedMemory } });
+      await db.memories.bulkPut(dedupedMemory);
       showStatus(`✔ Imported ${parsed.memory.length} memories!`);
       render();
     } catch (e) {
@@ -386,6 +367,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const tag = tagFilter.value;
       // If a tag is de-selected, we don't automatically clear the search bar anymore.
       render(searchInput.value, tag);
+    });
+  }
+
+  // Clear tag filter
+  if (clearTagFilter) {
+    clearTagFilter.addEventListener("click", () => {
+      tagFilter.value = "";
+      render(searchInput.value, "");
     });
   }
 
@@ -425,17 +414,19 @@ document.addEventListener("DOMContentLoaded", () => {
   // Clear
   if (clearBtn) clearBtn.addEventListener("click", async () => {
     if (!confirm("Clear all local memories?")) return;
-    await storageSet({ oml_memory: { profile:{}, memory:[] } });
+    await db.memories.clear();
+    await db.kvstore.clear(); // Clears profile as well
     render();
     moreMenu.style.display = "none";
   });
 
   // Export
   if (exportBtn) exportBtn.addEventListener('click', async () => {
-    const data = await storageGet(['oml_memory']);
-    const memObj = data.oml_memory || { profile: {}, memory: [] };
+    const profile = await getProfile();
+    const memories = await db.memories.toArray();
+    const exportObj = { profile, memory: memories };
     
-    const json = JSON.stringify(memObj, null, 2);
+    const json = JSON.stringify(exportObj, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     
@@ -450,8 +441,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Edit profile
   if (editProfile && profileModal) editProfile.addEventListener("click", async () => {
-    const currentData = await storageGet(['oml_memory']);
-    const currentProfile = (currentData.oml_memory && currentData.oml_memory.profile) || {};
+    const currentProfile = await getProfile();
     
     // Populate form
     document.getElementById('profileNameInput').value = currentProfile.name || '';
@@ -470,7 +460,7 @@ document.addEventListener("DOMContentLoaded", () => {
       description: document.getElementById('profileDescInput').value,
       location: document.getElementById('profileLocationInput').value,
     };
-    await updateProfile(newProfile);
+    await updateProfileAndRender(newProfile);
     profileModal.style.display = "none";
   });
 
@@ -482,8 +472,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const text = document.getElementById('memoryTextInput').value;
     const tags = document.getElementById('memoryTagsInput').value.split(',').map(t => t.trim()).filter(Boolean);
 
-    const all = await storageGet(['oml_memory']);
-    const memoryItem = (all.oml_memory.memory || []).find(mem => mem.id === id);
+    const memoryItem = await db.memories.get(id);
 
     if (memoryItem) {
       const updatedItem = { ...memoryItem, summary, text, tags };
@@ -507,8 +496,33 @@ document.addEventListener("DOMContentLoaded", () => {
     memoryEditModal.addEventListener("click", (e) => { if (e.target === memoryEditModal) memoryEditModal.style.display = "none"; });
   }
 
+  // --- One-time Data Migration from chrome.storage.local to IndexedDB ---
+  async function runMigration() {
+    const migrationFlag = await chrome.storage.local.get('oml_migrated_to_indexeddb_v1');
+    if (migrationFlag.oml_migrated_to_indexeddb_v1) {
+      console.log("OML: Data migration already completed.");
+      return;
+    }
+
+    console.log("OML: Starting one-time data migration to IndexedDB...");
+    const oldData = await chrome.storage.local.get('oml_memory');
+    if (oldData && oldData.oml_memory) {
+      const { profile, memory } = oldData.oml_memory;
+      if (profile && Object.keys(profile).length > 0) {
+        await updateProfile(profile);
+        console.log(`Migrated profile with ${Object.keys(profile).length} keys.`);
+      }
+      if (memory && Array.isArray(memory) && memory.length > 0) {
+        await db.memories.bulkPut(memory);
+        console.log(`Migrated ${memory.length} memories.`);
+      }
+      await chrome.storage.local.set({ 'oml_migrated_to_indexeddb_v1': true });
+      console.log("OML: Migration complete. Flag set.");
+    }
+  }
+
   // initial render
-  render();
+  runMigration().then(() => render());
 });
 
 // --- Parser functions moved from parser.js ---

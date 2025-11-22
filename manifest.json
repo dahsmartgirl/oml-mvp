@@ -37,7 +37,7 @@
         "*://chat.openai.com/*",
         "*://chatgpt.com/*",
         "*://claude.ai/*",
-        "*://*.google.com/*",
+        "*://gemini.google.com/*",
         "*://grok.com/*"
       ],
       "js": ["contentScript.js"],

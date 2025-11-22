@@ -56,9 +56,12 @@
         <img src="assets/search.svg" alt="Search" class="search-icon">
         <input type="text" id="search" placeholder="Search memories...">
       </div>
-      <select id="tagFilter">
-        <option value="">All Tags</option>
-      </select>
+      <div class="tag-filter-wrapper">
+        <select id="tagFilter">
+          <option value="">All Tags</option>
+        </select>
+        <button id="clearTagFilter" class="clear-filter-btn" title="Clear tag filter" hidden>&times;</button>
+      </div>
       <div class="sort-menu-container">
         <button id="sortBtn" class="icon-btn" title="Sort">
           <img src="assets/sort.svg" alt="Sort">
@@ -136,6 +139,8 @@
     </div>
   </div>
 
+  <script src="dexie.min.js"></script>
+  <script src="db.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
