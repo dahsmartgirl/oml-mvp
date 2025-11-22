@@ -1,7 +1,8 @@
 // background.js
-// Full replacement: tagging-enabled save handlers + accepts rich metadata from content script,
-// preserves getMemory/updateMemory handlers, context menu registration (defensive).
-// Also injects top-center toast with confetti animation when requested.
+// Now uses Dexie.js for all storage operations.
+
+importScripts('dexie.min.js');
+importScripts('db.js');
 
 // ---------- small logging helpers ----------
 function log(...args){ try{ console.log("[OML background]", ...args); }catch(e){} }
@@ -81,46 +82,26 @@ function toMemoryObjectFromPayload(payload = {}) {
   };
 }
 
-// ---------- storage helpers ----------
-function readMemoryRoot() {
-  return new Promise((resolve) => {
-    try {
-      chrome.storage.local.get(['oml_memory'], (res) => {
-        const root = (res && res.oml_memory) ? res.oml_memory : { profile: {}, memory: [] };
-        root.memory = Array.isArray(root.memory) ? root.memory : [];
-        resolve(root);
-      });
-    } catch (e) { resolve({ profile: {}, memory: [] }); }
-  });
-}
-
-function writeMemoryRoot(root) {
-  return new Promise((resolve) => {
-    try { chrome.storage.local.set({ oml_memory: root }, () => resolve()); } catch (e) { resolve(); }
-  });
-}
-
 async function saveMemoryObject(structured) {
   try {
-    const root = await readMemoryRoot();
-    root.memory = root.memory || [];
-    const existsIdx = root.memory.findIndex(m => String(m.text || "") === String(structured.text || "") && (m.page_url || "") === (structured.page_url || ""));
-    if (existsIdx >= 0) {
-      const existing = root.memory[existsIdx];
+    // Dexie doesn't have a direct way to find by text and URL, so we'll do a quick check.
+    // This is still much faster than reading the whole array from chrome.storage.
+    const existing = await db.memories.where('text').equals(structured.text).first();
+
+    if (existing && (existing.page_url || "") === (structured.page_url || "")) {
+      // If it exists, merge tags and update timestamp, then 'put' it back.
+      // 'put' will overwrite the existing item because the ID is the same.
+      structured.id = existing.id; // Ensure we are updating the same item.
       existing.created_at = structured.created_at || existing.created_at;
       existing.tags = Array.from(new Set([...(existing.tags||[]), ...(structured.tags||[])]));
       existing.summary = structured.summary || existing.summary;
-      // merge snippet/selectorHint if present
       if (structured.selectorHint) existing.selectorHint = structured.selectorHint;
       if (structured.snippet) existing.snippet = structured.snippet;
-      root.memory.splice(existsIdx, 1);
-      root.memory.unshift(existing);
+      await db.memories.put(existing);
     } else {
-      root.memory.unshift(structured);
-      if (root.memory.length > 5000) root.memory = root.memory.slice(0,5000);
+      // If it doesn't exist, 'put' will add it as a new item.
+      await db.memories.put(structured);
     }
-    await writeMemoryRoot(root);
-    return root;
   } catch (e) {
     warn("saveMemoryObject failed:", e && e.message ? e.message : e);
     return null;
@@ -323,11 +304,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         source: (message.meta && message.meta.source) ? message.meta.source : (message.source || "message_save")
       };
       const mem = toMemoryObjectFromPayload(payload);
-      saveMemoryObject(mem).then((root) => {
-        // show toast + confetti if requested
+      saveMemoryObject(mem).then(() => {
         const conf = !!message.confetti;
         if (sender && sender.tab && sender.tab.id) injectToastWithConfetti(sender.tab.id, "Saved to OML", conf);
-        if (typeof sendResponse === "function") sendResponse({ ok:true, memory: root });
+        if (typeof sendResponse === "function") sendResponse({ ok:true });
       }).catch((e) => {
         warn("saveMemoryObject failed (message path):", e && e.message ? e.message : e);
         if (typeof sendResponse === "function") sendResponse({ ok:false, reason:"save_failed" });
@@ -336,35 +316,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     if (message && message.type === 'getMemory') {
-      chrome.storage.local.get(['oml_memory'], res => {
-        if (typeof sendResponse === "function") sendResponse({ memory: res.oml_memory || null });
-      });
-      return true;
-    }
-
-    if (message && message.type === 'updateMemory') {
-      chrome.storage.local.get(['oml_memory'], res => {
-        const cur = res.oml_memory || { profile:{}, memory: [] };
-        const patch = message.patch || {};
-        try {
-          const combined = [...(patch.memory || []), ...(cur.memory || [])];
-          const dedup = [];
-          const seen = new Set();
-          for (const item of combined) {
-            const id = (item && item.id) ? item.id : null;
-            const key = id ? `id:${id}` : `txt:${String(item && (item.text||item)).slice(0,200)}|url:${String(item && item.page_url||"")}`;
-            if (!seen.has(key)) { seen.add(key); dedup.push(item); }
-          }
-          const mergedProfile = Object.assign({}, cur.profile || {}, patch.profile || {});
-          const next = { profile: mergedProfile, memory: dedup };
-          chrome.storage.local.set({ oml_memory: next }, () => {
-            if (typeof sendResponse === "function") sendResponse({ ok:true, memory: next });
-          });
-        } catch (e) {
-          warn("updateMemory merge error:", e && e.message ? e.message : e);
-          if (typeof sendResponse === "function") sendResponse({ ok:false, reason:"merge_error" });
-        }
-      });
+      // This is used by contentScript's pickRelevant function.
+      (async () => {
+        const profile = await getProfile();
+        const memories = await db.memories.toArray();
+        if (typeof sendResponse === "function") sendResponse({ memory: { profile, memory: memories } });
+      })();
       return true;
     }
   } catch (e) {
@@ -373,36 +330,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.runtime.onInstalled.addListener(async (details) => {
-  if (details.reason === 'install') {
-    // First-time install
-    const sample = {
-      profile: {},
-      memory: [
-        {
-          id: 'm_sample_1',
-          text: 'I prefer concise explanations over verbose ones',
-          summary: 'Prefers concise explanations',
-          tags: ['personal', 'preference'],
-          page_title: 'OML Sample',
-          page_url: '',
-          source: 'sample',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'm_sample_2',
-          text: 'I am learning to code and building browser extensions',
-          summary: 'Learning to code, building extensions',
-          tags: ['personal', 'code'],
-          page_title: 'OML Sample',
-          page_url: '',
-          source: 'sample',
-          created_at: new Date().toISOString()
-        }
-      ]
-    };
-    
-    chrome.storage.local.set({ oml_memory: sample });
+  if (details.reason !== 'install') return;
+  // First-time install: add some sample memories.
+  const sampleMemories = [
+    { id: 'm_sample_1', text: 'I prefer concise explanations over verbose ones', summary: 'Prefers concise explanations', tags: ['personal', 'preference'], source: 'sample', created_at: new Date().toISOString() },
+    { id: 'm_sample_2', text: 'I am learning to code and building browser extensions', summary: 'Learning to code, building extensions', tags: ['personal', 'code'], source: 'sample', created_at: new Date().toISOString() }
+  ];
+  try {
+    // Use bulkPut to add samples, which won't overwrite if they somehow exist.
+    await db.memories.bulkPut(sampleMemories);
+    log("Added sample memories on first install.");
+  } catch (e) {
+    warn("Failed to add sample memories on install:", e);
   }
 });
 
-log("background service initialized — rich save + confetti ready");
+log("background service initialized — using Dexie.js");
